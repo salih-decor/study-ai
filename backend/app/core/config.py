@@ -64,6 +64,13 @@ class Settings(BaseSettings):
 settings = Settings()
 
 
+# Aiven وغيرها تعطي الرابط بصيغة postgres:// بينما SQLAlchemy 2.0.x أزال دعم
+# هذا المخطط الضمني (NoSuchModuleError: Can't load plugin: sqlalchemy.dialects:postgres).
+# تطبيع آمن: يستبدل البادئة فقط ولا يلمس أي جزء آخر من الرابط أو الأسرار.
+if settings.DATABASE_URL.startswith("postgres://") and not settings.DATABASE_URL.startswith("postgresql://"):
+    settings.DATABASE_URL = "postgresql://" + settings.DATABASE_URL[len("postgres://"):]
+
+
 def cors_origin_list() -> list[str]:
     return [o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()]
 
