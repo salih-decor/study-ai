@@ -16,6 +16,12 @@ class Settings(BaseSettings):
     ALGORITHM: str = os.getenv("ALGORITHM", "HS256")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))
 
+    # كلمات مرور seed التطوير (تُقرأ من البيئة في seed_dev.py فقط).
+    # أُعلن عنها هنا لأنها منصوصة في .env.example؛ وإلا ترفضها pydantic-settings
+    # كمدخلات زائدة (extra_forbidden) عند قراءة .env وتفشل Settings() حتى في التطوير.
+    DEV_ADMIN_PASSWORD: str = os.getenv("DEV_ADMIN_PASSWORD", "")
+    DEV_STUDENT_PASSWORD: str = os.getenv("DEV_STUDENT_PASSWORD", "")
+
     # CORS: قائمة مفصولة بفواصل (لا "*" في الإنتاج — يُرفض عند الإقلاع)
     CORS_ORIGINS: str = os.getenv("CORS_ORIGINS", "http://localhost:3000")
     ENABLE_DOCS: bool = os.getenv("ENABLE_DOCS", "true").lower() == "true"
