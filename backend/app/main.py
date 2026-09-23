@@ -19,9 +19,11 @@ if is_production():
 
 
 # إنشاء الجداول عند التشغيل — Development fallback فقط.
-# في الإنتاج تُدار التغييرات عبر Alembic (backend/alembic/)، وهذا السطر لا يعدّل
-# جداول موجودة (create_all ينشئ الناقص فقط) ولا يغني عن migrations مستقبلًا.
-Base.metadata.create_all(bind=engine)
+# في الإنتاج تُدار التغييرات عبر Alembic (backend/alembic/)، ولا يُنفَّذ create_all
+# أبدًا في بيئة production (الحماية أسفل: إذا وجد جدولًا ناقصًا يفشل Alembic بدل
+# إنشائه تلقائيًا، وهو السلوك المطلوب للإنتاج).
+if not is_production():
+    Base.metadata.create_all(bind=engine)
 
 
 # الوثائق التفاعلية: للتطوير فقط (مخفية دائمًا في الإنتاج).
