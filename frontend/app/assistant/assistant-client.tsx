@@ -71,11 +71,11 @@ export default function AssistantClient() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
-      <header className="bg-white border-b px-6 py-4 flex justify-between items-center max-w-7xl mx-auto w-full">
+    <div className="min-h-screen bg-gray-950 flex flex-col" style={{ fontFamily: "'Inter', 'Segoe UI', 'Helvetica Neue', sans-serif" }}>
+      <header className="bg-gray-900 border-b border-gray-800 px-6 py-4 flex justify-between items-center max-w-7xl mx-auto w-full">
         <Link href="/dashboard" className="flex items-center gap-2">
-          <span className="text-2xl">🤖</span>
-          <span className="font-bold text-lg text-slate-800">المساعد الذكي</span>
+          <span className="text-3xl">🤖</span>
+          <span className="font-bold text-xl text-white">(المساعد الذكي)</span>
         </Link>
         {lessonId ? (
           <Link href={`/lessons/${lessonId}`} className="text-sm font-semibold text-blue-600 hover:underline">
@@ -88,7 +88,7 @@ export default function AssistantClient() {
         )}
       </header>
 
-      <main className="max-w-3xl mx-auto w-full p-6 flex-1 flex flex-col">
+      <main className="max-w-3xl mx-auto w-full p-6 flex-1 overflow-y-auto flex flex-col">
         {lessonId && (
           <div className="mb-4 p-3 text-sm text-blue-800 bg-blue-50 rounded-xl border border-blue-100 text-center">
             📖 الإجابات من محتوى الدرس المحدد فقط
@@ -98,24 +98,24 @@ export default function AssistantClient() {
         {answer && (
           <div className="space-y-4 mb-6">
             {!answer.grounded && (
-              <div className="p-4 text-sm text-amber-800 bg-amber-50 rounded-2xl border border-amber-200 text-center font-semibold">
+              <div className="p-4 text-sm text-amber-300 bg-amber-900/50 rounded-2xl border border-amber-700 text-center font-semibold">
                 ⚠️ لم أجد في المحتوى المتاح معلومات كافية للإجابة — الإجابة أدناه غير مستندة لمحتوى الدرس.
               </div>
             )}
             {answer.grounded && (
-              <div className="p-3 text-sm text-emerald-700 bg-emerald-50 rounded-2xl border border-emerald-200 text-center font-semibold">
+              <div className="p-3 text-sm text-emerald-300 bg-emerald-900/50 rounded-2xl border border-emerald-700 text-center font-semibold">
                 ✓ إجابة مستندة إلى محتوى دروس المنصة ({answer.sources.length} {answer.sources.length === 1 ? "مصدر" : "مصادر"})
               </div>
             )}
-            <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-              <div className="whitespace-pre-wrap leading-relaxed text-slate-800">{answer.answer}</div>
+            <div className="bg-gray-900 p-6 rounded-3xl border border-gray-700 shadow-sm">
+              <div className="whitespace-pre-wrap leading-relaxed text-gray-100">{answer.answer}</div>
             </div>
             {answer.sources.length > 0 && (
-              <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm">
-                <h3 className="font-bold text-sm text-slate-700 mb-3">📚 المصادر المستخدمة ({answer.sources.length})</h3>
+              <div className="bg-gray-900 p-5 rounded-3xl border border-gray-700 shadow-sm">
+                <h3 className="font-bold text-sm text-gray-200 mb-3">📚 المصادر المستخدمة ({answer.sources.length})</h3>
                 <div className="space-y-2">
                   {answer.sources.map((s) => (
-                    <div key={s.chunk_id} className="text-sm text-slate-600 bg-slate-50 px-4 py-2.5 rounded-xl border border-slate-100">
+                    <div key={s.chunk_id} className="text-sm text-gray-300 bg-gray-800 px-4 py-2.5 rounded-xl border border-gray-700">
                       📄 {s.title} <span className="text-slate-400">(مقطع #{s.chunk_id})</span>
                     </div>
                   ))}
@@ -126,16 +126,16 @@ export default function AssistantClient() {
         )}
 
         {error && (
-          <div className="mb-4 p-3 text-sm text-red-600 bg-red-50 rounded-xl border border-red-100 text-center">{error}</div>
+          <div className="mb-4 p-3 text-sm text-red-400 bg-red-900/50 rounded-xl border border-red-700 text-center">{error}</div>
         )}
 
-        <form onSubmit={handleSubmit} className="mt-auto bg-white p-4 rounded-3xl border border-slate-200 shadow-sm">
+        <form onSubmit={handleSubmit} className="mt-auto sticky bottom-0 bg-gray-900 p-4 rounded-3xl border border-gray-700 shadow-sm">
           <textarea
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             placeholder="اكتب سؤالك هنا..."
             rows={3}
-            className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition resize-none"
+            className="w-full px-4 py-3 rounded-2xl border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition resize-none"
           />
           <button
             type="submit"

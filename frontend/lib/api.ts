@@ -11,7 +11,7 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
   };
   const token = getToken();
   if (token) headers["Authorization"] = `Bearer ${token}`;
-  if (options.body && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
+  if (options.body && !headers["Content-Type"] && !(options.body instanceof FormData)) headers["Content-Type"] = "application/json";
 
   const res = await fetch(`${API_URL}${path}`, { ...options, headers });
   if (res.status === 204) return undefined as T;
