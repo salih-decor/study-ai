@@ -67,6 +67,9 @@ class OpenAIVisionProvider(OcrProvider):
             data=payload,
             headers={
                 "Content-Type": "application/json",
+                # User-Agent عادي بدل توقيع Python-urllib الافتراضي
+                # (توقيعات البوتات تُحظر من حماية Cloudflare — خطأ 1010)
+                "User-Agent": "study-ai/1.0",
                 "Authorization": f"Bearer {self.api_key}",
             },
             method="POST",
