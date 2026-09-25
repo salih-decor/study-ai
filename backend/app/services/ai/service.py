@@ -1,5 +1,7 @@
 """خدمة الذكاء الاصطناعي التعليمية — تبني الـ prompts وتستدعي المزود."""
 
+import json
+
 from app.services.ai.provider import get_provider, MockProvider
 
 
@@ -70,6 +72,31 @@ class AIService:
         user_prompt = self.build_user_prompt(question, context_blocks, action, student_level)
         answer = self.provider.complete(SYSTEM_PROMPT_AR, user_prompt)
         return answer, True
+
+    def confirm_answer(
+        self,
+        question_text: str,
+        direct_answer: str,
+        context_blocks: list[str],
+    ) -> tuple[str, str]:
+        """تأكيد/تصحيح الحل المباشر بالاعتماد على سياق الدروس — ترجع (الإجابة، الشرح)."""
+        context = "\n\n".join(f"[مقطع {i}]\n{b}" for i, b in enumerate(context_blocks, 1))
+        user_prompt = (
+            "السياق المسترجع من دروس المنصة:\n" + context +
+            f"\n\nسؤال الطالب: {question_text}"
+            f"\n\nالحل المباشر المقترح: {direct_answer}"
+            "\n\nالمطلوب: راجع الحل المباشر بالاعتماد على السياق فقط، وصححه إن كان خاطئًا. "
+            "أعد JSON فقط بهذا الشكل تمامًا وبدون أي شرح خارج JSON: "
+            '{"correct_answer": "...", "explanation": "..."}'
+        )
+        raw = self.provider.complete(SYSTEM_PROMPT_AR, user_prompt)
+        content = raw.strip()
+        if content.startswith("```"):
+            content = content.strip("`")
+            if content.startswith("json"):
+                content = content[4:]
+        parsed = json.loads(content.strip())
+        return str(parsed.get("correct_answer", direct_answer)), str(parsed.get("explanation", ""))
 
 
 def get_ai_service() -> AIService:

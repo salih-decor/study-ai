@@ -87,6 +87,62 @@ class OpenAIVisionProvider(OcrProvider):
             return None
 
 
+    def extract_questions(self, data: bytes, mime_type: str) -> list[dict] | None:
+        """استخراج الأسئلة مع الخيارات والحل المباشر دفعة واحدة (JSON منظم، بحد أقصى 10)."""
+        import base64
+        b64 = base64.b64encode(data).decode("utf-8")
+        mime = mime_type or "image/png"
+        payload = json.dumps({
+            "model": self.model,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": (
+                            "استخرج جميع الأسئلة الموجودة في هذه الصورة (بحد أقصى 10 أسئلة) "
+                            "واستخرج خيارات كل سؤال إن وجدت وحل كل سؤال مباشرة مع شرح مختصر. "
+                            "أعد JSON فقط بهذا الشكل تمامًا وبدون أي شرح خارج JSON: "
+                            '{"questions": [{"question_text": "...", "options": ["..."], '
+                            '"direct_answer": "...", "explanation": "..."}]}'
+                        )},
+                        {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}},
+                    ],
+                }
+            ],
+            "max_tokens": 4000,
+        }).encode("utf-8")
+        req = urllib.request.Request(
+            f"{self.base_url}/chat/completions",
+            data=payload,
+            headers={
+                "Content-Type": "application/json",
+                # User-Agent عادي بدل توقيع Python-urllib الافتراضي
+                # (توقيعات البوتات تُحظر من حماية Cloudflare — خطأ 1010)
+                "User-Agent": "study-ai/1.0",
+                "Authorization": f"Bearer {self.api_key}",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=90) as resp:
+                result = json.loads(resp.read().decode("utf-8"))
+            content = result["choices"][0]["message"]["content"].strip()
+            if content.startswith("```"):
+                content = content.strip("`")
+                if content.startswith("json"):
+                    content = content[4:]
+            parsed = json.loads(content.strip())
+            items = parsed.get("questions", []) if isinstance(parsed, dict) else []
+            return [it for it in items if isinstance(it, dict) and it.get("question_text")][:10]
+        except urllib.error.HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="replace")
+            print(f"[DEBUG OCR] HTTP {exc.code}: {body[:200]}", file=sys.stderr)
+            return None
+        except Exception as exc:
+            print(f"[DEBUG OCR] {type(exc).__name__}: {exc}", file=sys.stderr)
+            return None
+
+
 def get_ocr_provider() -> OcrProvider:
     """إرجاع مزود OCR حقيقي إذا كانت الإعدادات متوفرة، وإلا NullOcrProvider."""
     if (
