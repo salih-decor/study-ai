@@ -63,9 +63,9 @@ export default function ImageAnalysisPage() {
       const qs = res.questions || [];
       setQuestions(qs);
       if (res.message) setMessage(res.message);
-      const ids = [...new Set(
+      const ids = Array.from(new Set(
         qs.map((q) => q.lesson_id).filter((v): v is number => typeof v === "number")
-      )];
+      ));
       const titles: Record<number, string> = {};
       await Promise.all(ids.map(async (id) => {
         try {
