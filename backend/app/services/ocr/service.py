@@ -8,7 +8,12 @@
 """
 
 from abc import ABC, abstractmethod
+import json
 import os
+import sys
+import urllib.request
+import urllib.error
+from app.core.config import settings
 
 
 ALLOWED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
@@ -30,7 +35,68 @@ class NullOcrProvider(OcrProvider):
         return None
 
 
+class OpenAIVisionProvider(OcrProvider):
+    """مزود رؤية عبر OpenAI-compatible API — يرسل الصورة كـ base64."""
+
+    NAME = "openai-vision"
+
+    def __init__(self, base_url: str, api_key: str, model: str):
+        self.base_url = base_url.rstrip("/")
+        self.api_key = api_key
+        self.model = model
+
+    def extract_text(self, data: bytes, mime_type: str) -> str | None:
+        import base64
+        b64 = base64.b64encode(data).decode("utf-8")
+        mime = mime_type or "image/png"
+        payload = json.dumps({
+            "model": self.model,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "استخرج النص من هذه الصورة فقط. لا تشرح، فقط اكتب النص."},
+                        {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{b64}"}},
+                    ],
+                }
+            ],
+            "max_tokens": 1000,
+        }).encode("utf-8")
+        req = urllib.request.Request(
+            f"{self.base_url}/chat/completions",
+            data=payload,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.api_key}",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                result = json.loads(resp.read().decode("utf-8"))
+            return result["choices"][0]["message"]["content"].strip()
+        except urllib.error.HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="replace")
+            print(f"[DEBUG OCR] HTTP {exc.code}: {body[:200]}", file=sys.stderr)
+            return None
+        except Exception as exc:
+            print(f"[DEBUG OCR] {type(exc).__name__}: {exc}", file=sys.stderr)
+            return None
+
+
 def get_ocr_provider() -> OcrProvider:
+    """إرجاع مزود OCR حقيقي إذا كانت الإعدادات متوفرة، وإلا NullOcrProvider."""
+    if (
+        settings.AI_PROVIDER == "openai-compatible"
+        and settings.AI_API_KEY
+        and settings.AI_BASE_URL
+        and settings.AI_VISION_MODEL
+    ):
+        return OpenAIVisionProvider(
+            base_url=settings.AI_BASE_URL,
+            api_key=settings.AI_API_KEY,
+            model=settings.AI_VISION_MODEL,
+        )
     return NullOcrProvider()
 
 
