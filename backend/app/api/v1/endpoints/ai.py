@@ -17,18 +17,18 @@ from app.services.rate_limit import check_ai_rate_limit
 
 router = APIRouter()
 @router.get("/diagnose")
+@router.get("/diagnose")
 def diagnose():
     import os
     from app.core.config import settings
-
     return {
-        "OS_AI_MODEL": os.environ.get("AI_MODEL", "NOT_SET"),
+        "OS_AI_MODEL": os.environ.get('AI_MODEL', 'NOT_SET'),
         "SETTINGS_AI_MODEL": settings.AI_MODEL,
-        "OS_AI_VISION_MODEL": os.environ.get("AI_VISION_MODEL", "NOT_SET"),
-        "SETTINGS_AI_VISION_MODEL": settings.AI_VISION_MODEL,
-        "OS_AI_PROVIDER": os.environ.get("AI_PROVIDER", "NOT_SET"),
+        "OS_AI_VISION_MODEL": os.environ.get('AI_VISION_MODEL', 'NOT_SET'),
+        "SETTINGS_AI_VISION_MODEL": getattr(settings, 'AI_VISION_MODEL', 'NOT_DEFINED'),
+        "OS_AI_PROVIDER": os.environ.get('AI_PROVIDER', 'NOT_SET'),
         "SETTINGS_AI_PROVIDER": settings.AI_PROVIDER,
-        "OS_AI_BASE_URL_SET": bool(os.environ.get("AI_BASE_URL")),
+        "OS_AI_BASE_URL_SET": bool(os.environ.get('AI_BASE_URL')),
         "SETTINGS_AI_BASE_URL_SET": bool(settings.AI_BASE_URL),
         "CWD": os.getcwd(),
     }
