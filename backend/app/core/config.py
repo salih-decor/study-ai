@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     AI_PROVIDER: str = os.getenv("AI_PROVIDER", "mock")  # mock | openai-compatible
     AI_API_KEY: str = os.getenv("AI_API_KEY", "")
     AI_MODEL: str = os.getenv("AI_MODEL", "gpt-4o-mini")
+    AI_VISION_MODEL: str = os.getenv("AI_VISION_MODEL", "gpt-4o-mini")
     AI_BASE_URL: str = os.getenv("AI_BASE_URL", "")
     AI_MAX_QUESTION_CHARS: int = int(os.getenv("AI_MAX_QUESTION_CHARS", "2000"))
     AI_RATE_LIMIT_PER_HOUR: int = int(os.getenv("AI_RATE_LIMIT_PER_HOUR", "30"))
