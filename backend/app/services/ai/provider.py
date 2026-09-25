@@ -2,7 +2,9 @@
 
 from abc import ABC, abstractmethod
 import json
+import sys
 import urllib.request
+import urllib.error
 from app.core.config import settings
 
 
@@ -53,6 +55,9 @@ class OpenAICompatibleProvider(AIProvider):
             data=payload,
             headers={
                 "Content-Type": "application/json",
+                # User-Agent عادي بدل توقيع Python-urllib الافتراضي
+                # (توقيعات البوتات تُحظر من حماية Cloudflare — خطأ 1010)
+                "User-Agent": "study-ai/1.0",
                 # المفتاح يُرسل في الترويسة فقط ولا يُسجَّل أبدًا
                 "Authorization": f"Bearer {self.api_key}",
             },
@@ -62,8 +67,12 @@ class OpenAICompatibleProvider(AIProvider):
             with urllib.request.urlopen(req, timeout=30) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
             return data["choices"][0]["message"]["content"].strip()
+        except urllib.error.HTTPError as exc:
+            body = exc.read().decode("utf-8", errors="replace")
+            print(f"[DEBUG AI] HTTP {exc.code} from {self.base_url}: {body[:300]}", file=sys.stderr)
+            raise RuntimeError(f"AI_PROVIDER_HTTP_{exc.code}") from exc
         except Exception as exc:
-            # لا نكشف أي تفاصيل داخلية أو أسرار للمستخدم
+            print(f"[DEBUG AI] {type(exc).__name__}: {exc}", file=sys.stderr)
             raise RuntimeError("AI_PROVIDER_ERROR") from exc
 
 
