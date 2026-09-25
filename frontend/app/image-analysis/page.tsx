@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import type { Subject, Lesson } from "@/lib/api";
@@ -14,6 +14,9 @@ interface SolvedQuestion {
 
 export default function ImageAnalysisPage() {
   const [file, setFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const galleryRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [subjectId, setSubjectId] = useState("");
@@ -30,6 +33,12 @@ export default function ImageAnalysisPage() {
       .catch(() => {});
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
+
   async function handleSubject(id: string) {
     setSubjectId(id);
     setLessonId("");
@@ -44,10 +53,13 @@ export default function ImageAnalysisPage() {
   }
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-    setFile(e.target.files?.[0] || null);
+    const next = e.target.files?.[0] || null;
+    setFile(next);
+    setPreviewUrl(next ? URL.createObjectURL(next) : null);
     setQuestions([]);
     setError("");
     setMessage("");
+    e.target.value = "";
   }
 
   async function handleAnalyze() {
@@ -100,8 +112,24 @@ export default function ImageAnalysisPage() {
           <label className="block text-sm font-bold text-gray-300 mb-2">
             اختر صورة (jpg، png، webp — الحد 5MB)
           </label>
-          <input type="file" accept="image/*" onChange={handleFile}
-                 className="block w-full text-sm text-gray-400 mb-4" />
+          <input ref={galleryRef} type="file" accept="image/*" onChange={handleFile} className="hidden" />
+          <input ref={cameraRef} type="file" accept="image/*" capture="environment" onChange={handleFile} className="hidden" />
+          <div className="flex gap-3 mb-4" dir="rtl">
+            <button type="button" onClick={() => galleryRef.current?.click()}
+                    className="flex-1 py-3 font-bold text-white bg-blue-600 rounded-2xl hover:bg-blue-700 active:scale-[0.98] transition text-base">
+              🖼️ اختيار صورة
+            </button>
+            <button type="button" onClick={() => cameraRef.current?.click()}
+                    className="flex-1 py-3 font-bold text-white bg-teal-600 rounded-2xl hover:bg-teal-700 active:scale-[0.98] transition text-base">
+              📷 تصوير بالكاميرا
+            </button>
+          </div>
+          {previewUrl && (
+            <div className="mb-4">
+              <img src={previewUrl} alt="معاينة الصورة المختارة"
+                   className="w-full max-h-72 object-contain rounded-2xl border border-gray-700 bg-gray-800" />
+            </div>
+          )}
 
           <label className="block text-sm font-bold text-gray-300 mb-2">
             المادة (اختياري — لتحسين البحث في الدروس)
