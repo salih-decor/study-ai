@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiFetch, API_URL, Subject, Lesson, Quiz, QuizDetail, QuizQuestionAdmin, LessonDocument } from "@/lib/api";
+import type { TaxLevel, TaxBranch } from "@/lib/api";
 
 export interface AdminOverview {
   totals: { subjects: number; lessons: number; quizzes: number; questions: number; users: number; completed_attempts: number };
@@ -27,6 +28,12 @@ export default function AdminPage() {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [filterSubject, setFilterSubject] = useState<string>("all");
+  // فلتر النطاق العام: المستوى → الشعبة → المادة → المحتوى
+  const [scopeLevel, setScopeLevel] = useState<string>("");
+  const [scopeBranch, setScopeBranch] = useState<string>("");
+  const [scopeLevels, setScopeLevels] = useState<TaxLevel[]>([]);
+  const [allTaxBranches, setAllTaxBranches] = useState<TaxBranch[]>([]);
+  const [scopeNames, setScopeNames] = useState<{ levels: Record<number, string>; branches: Record<number, string> }>({ levels: {}, branches: {} });
   const [overview, setOverview] = useState<AdminOverview | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -71,6 +78,28 @@ export default function AdminPage() {
     if (ov) setOverview(ov);
   };
 
+  const loadScopeTaxonomy = async () => {
+    try {
+      const lv = await apiFetch<TaxLevel[]>("/api/v1/levels", { cache: "no-store" });
+      setScopeLevels(lv);
+      const names: { levels: Record<number, string>; branches: Record<number, string> } = { levels: {}, branches: {} };
+      const allB: TaxBranch[] = [];
+      for (const l of lv) {
+        names.levels[l.id] = l.name;
+        try {
+          const br = await apiFetch<TaxBranch[]>(`/api/v1/levels/${l.id}/branches`, { cache: "no-store" });
+          for (const b of br) { names.branches[b.id] = b.name; allB.push(b); }
+        } catch { /* تجاهل مستوى واحد */ }
+      }
+      setScopeNames(names);
+      setAllTaxBranches(allB);
+    } catch { /* بلا نطاقات — تعمل اللوحة كما قبل */ }
+  };
+  const handleScopeLevel = (id: string) => {
+    setScopeLevel(id);
+    setScopeBranch("");
+  };
+
   useEffect(() => {
     const token = localStorage.getItem("token");
     const role = localStorage.getItem("user_role");
@@ -85,6 +114,7 @@ export default function AdminPage() {
     loadAll()
       .catch((e: unknown) => setError(e instanceof Error ? e.message : "تعذر التحميل"))
       .finally(() => setChecking(false));
+    loadScopeTaxonomy();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
@@ -190,7 +220,7 @@ export default function AdminPage() {
   // ---------- الدروس ----------
   const openNewLesson = () => {
     setEditingLesson(null);
-    setLessonForm({ ...EMPTY_LESSON, subject_id: subjects[0]?.id ?? 0 });
+    setLessonForm({ ...EMPTY_LESSON, subject_id: scopedSubjects[0]?.id ?? 0 });
     setShowLessonForm(true);
   };
   const openEditLesson = (l: Lesson) => {
@@ -213,6 +243,7 @@ export default function AdminPage() {
         display_order: Number(lessonForm.display_order),
         is_published: lessonForm.is_published,
         scheduled_at: lessonForm.scheduled_at ? lessonForm.scheduled_at + ":00" : null,
+        ...scopeAssertion,
       };
       if (editingLesson) {
         await apiFetch(`/api/v1/lessons/${editingLesson.id}`, { method: "PUT", body: JSON.stringify(payload) });
@@ -255,7 +286,7 @@ export default function AdminPage() {
   };
   const openNewQuiz = () => {
     setEditingQuiz(null);
-    setQuizForm({ lesson_id: lessons[0]?.id ?? 0, title: "", description: "", is_active: true });
+    setQuizForm({ lesson_id: scopedLessons[0]?.id ?? 0, title: "", description: "", is_active: true });
     setShowQuizForm(true);
   };
   const openEditQuiz = (q: Quiz) => {
@@ -266,7 +297,7 @@ export default function AdminPage() {
   const saveQuiz = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const payload = { ...quizForm, lesson_id: Number(quizForm.lesson_id), description: quizForm.description || null };
+      const payload = { ...quizForm, lesson_id: Number(quizForm.lesson_id), description: quizForm.description || null, ...scopeAssertion };
       if (editingQuiz) {
         await apiFetch(`/api/v1/quizzes/${editingQuiz.id}`, { method: "PUT", body: JSON.stringify(payload) });
         flash("تم تعديل الاختبار ✅");
@@ -420,8 +451,34 @@ export default function AdminPage() {
       await loadDocs(docLessonId);
     } catch (e: unknown) { fail(e); }
   };
-
-  const visibleLessons = lessons.filter(    (l) => filterSubject === "all" || l.subject_id === Number(filterSubject)
+  // نطاق المادة كنص: "الاسم — المستوى — الشعبة" لمنع اختلاط المتشابهات
+  const subjectScopeLabel = (s: Subject) => {
+    const parts = [s.name];
+    if (s.level_id != null && scopeNames.levels[s.level_id]) parts.push(scopeNames.levels[s.level_id]);
+    if (s.branch_id != null && scopeNames.branches[s.branch_id]) parts.push(scopeNames.branches[s.branch_id]);
+    return parts.join(" — ");
+  };
+  const subjectInScope = (s: Subject) =>
+    (scopeLevel === "" || (s.level_id != null && String(s.level_id) === scopeLevel)) &&
+    (scopeBranch === "" || (s.branch_id != null && String(s.branch_id) === scopeBranch));
+  const scopedSubjects = subjects.filter(subjectInScope);
+  const scopedLessons = lessons.filter((l) => {
+    const s = subjects.find((x) => x.id === l.subject_id);
+    return s ? subjectInScope(s) : true;
+  });
+  const scopedQuizzes = quizzes.filter((q) => {
+    const l = lessons.find((x) => x.id === q.lesson_id);
+    if (!l) return true;
+    const s = subjects.find((x) => x.id === l.subject_id);
+    return s ? subjectInScope(s) : true;
+  });
+  const scopeBranchOpts = scopeLevel === "" ? [] : allTaxBranches.filter((b) => String(b.level_id) === scopeLevel);
+  const scopeAssertion = {
+    ...(scopeLevel !== "" ? { level_id: Number(scopeLevel) } : {}),
+    ...(scopeBranch !== "" ? { branch_id: Number(scopeBranch) } : {}),
+  };
+  const visibleLessons = scopedLessons.filter((l) => filterSubject === "all" ||
+l.subject_id === Number(filterSubject)
   );
 
   if (checking) return <div className="min-h-screen flex items-center justify-center text-slate-500">جاري التحقق من الصلاحيات...</div>;
@@ -562,7 +619,7 @@ export default function AdminPage() {
             )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {subjects.map((s) => (
+              {scopedSubjects.map((s) => (
                 <div key={s.id} className={`bg-white p-5 rounded-3xl border shadow-sm ${s.is_active ? "border-slate-100" : "border-amber-200 bg-amber-50/40"}`}>
                   <div className="flex justify-between items-start">
                     <div className="text-3xl">{s.icon || "📖"}</div>
@@ -572,6 +629,7 @@ export default function AdminPage() {
                   </div>
                   <h3 className="mt-2 font-bold text-slate-900">{s.name}</h3>
                   <p className="text-xs text-slate-500 mt-1">ترتيب: {s.display_order} • دروس: {s.lessons_count}</p>
+                  <p className="text-[11px] text-slate-400 mt-1">النطاق: {subjectScopeLabel(s) === s.name ? "عام — كل المستويات" : subjectScopeLabel(s).replace(s.name + " — ", "")}</p>
                   <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold">
                     <button onClick={() => openEditSubject(s)} className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100">تعديل</button>
                     <button onClick={() => toggleSubjectActive(s)} className="px-3 py-1.5 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200">
@@ -590,10 +648,18 @@ export default function AdminPage() {
           <section>
             <div className="flex flex-wrap justify-between items-center gap-3 mb-4">
               <h2 className="text-xl font-bold text-slate-800">الدروس</h2>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
+                <select value={scopeLevel} onChange={(e) => handleScopeLevel(e.target.value)} className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm" title="فلترة حسب المستوى">
+                  <option value="">كل المستويات</option>
+                  {scopeLevels.map((l) => <option key={l.id} value={String(l.id)}>{l.name}</option>)}
+                </select>
+                <select value={scopeBranch} onChange={(e) => setScopeBranch(e.target.value)} className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm" title="فلترة حسب الشعبة">
+                  <option value="">كل الشعب</option>
+                  {scopeBranchOpts.map((b) => <option key={b.id} value={String(b.id)}>{b.name}</option>)}
+                </select>
                 <select value={filterSubject} onChange={(e) => setFilterSubject(e.target.value)} className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm">
                   <option value="all">كل المواد</option>
-                  {subjects.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  {scopedSubjects.map((s) => <option key={s.id} value={s.id}>{subjectScopeLabel(s)}</option>)}
                 </select>
                 <button onClick={openNewLesson} className="px-5 py-2.5 text-sm font-bold text-white bg-blue-600 rounded-xl hover:bg-blue-700 shadow-md shadow-blue-200">
                   + درس جديد
@@ -607,7 +673,7 @@ export default function AdminPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <label className="text-sm text-slate-700">المادة:
                     <select value={lessonForm.subject_id} onChange={(e) => setLessonForm({ ...lessonForm, subject_id: Number(e.target.value) })} className={inputCls + " mt-1"}>
-                      {subjects.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                      {scopedSubjects.map((s) => <option key={s.id} value={s.id}>{subjectScopeLabel(s)}</option>)}
                     </select>
                   </label>
                   <label className="text-sm text-slate-700">عنوان الدرس *:
@@ -677,7 +743,10 @@ export default function AdminPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <label className="text-sm text-slate-700">الدرس:
                     <select value={quizForm.lesson_id} onChange={(e) => setQuizForm({ ...quizForm, lesson_id: Number(e.target.value) })} className={inputCls + " mt-1"}>
-                      {lessons.map((l) => <option key={l.id} value={l.id}>{l.subject_name} — {l.title}</option>)}
+                      {scopedLessons.map((l) => {
+                        const s = subjects.find((x) => x.id === l.subject_id);
+                        return <option key={l.id} value={l.id}>{s ? subjectScopeLabel(s) + " / " : ""}{l.title}</option>;
+                      })}
                     </select>
                   </label>
                   <label className="text-sm text-slate-700">عنوان الاختبار *:
@@ -697,7 +766,7 @@ export default function AdminPage() {
             )}
 
             <div className="space-y-3 mb-6">
-              {quizzes.map((q) => (
+              {scopedQuizzes.map((q) => (
                 <div key={q.id} className={`bg-white p-4 rounded-2xl border shadow-sm ${selectedQuizId === q.id ? "border-blue-400 ring-2 ring-blue-100" : "border-slate-100"}`}>
                   <div className="flex flex-wrap items-center gap-3">
                     <span className={`text-[11px] font-bold px-2 py-1 rounded-lg ${q.is_active ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
@@ -805,7 +874,10 @@ export default function AdminPage() {
                 className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm"
               >
                 <option value="">— اختر الدرس —</option>
-                {lessons.map((l) => <option key={l.id} value={l.id}>{l.subject_name} — {l.title}</option>)}
+                {scopedLessons.map((l) => {
+                  const s = subjects.find((x) => x.id === l.subject_id);
+                  return <option key={l.id} value={l.id}>{s ? subjectScopeLabel(s) + " / " : ""}{l.title}</option>;
+                })}
               </select>
             </div>
 

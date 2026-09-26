@@ -45,6 +45,19 @@ def _quiz_to_out(db: Session, quiz: Quiz) -> QuizOut:
     return out
 
 
+def _assert_lesson_scope(
+    db: Session, lesson: Lesson, level_id: int | None, branch_id: int | None
+) -> None:
+    """رفض الربط المتقاطع: تأكيد النطاق المرسل يجب أن يطابق نطاق مادة الدرس (400 عند التعارض)."""
+    subject = db.query(Subject).filter(Subject.id == lesson.subject_id).first()
+    if subject is None:
+        return
+    if level_id is not None and subject.level_id is not None and subject.level_id != level_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="الدرس لا ينتمي إلى المستوى المحدد")
+    if branch_id is not None and subject.branch_id is not None and subject.branch_id != branch_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="الدرس لا ينتمي إلى الشعبة المحددة")
+
+
 def _get_quiz_for_admin(db: Session, quiz_id: int) -> Quiz:
     quiz = db.query(Quiz).filter(Quiz.id == quiz_id).first()
     if quiz is None:
@@ -90,7 +103,11 @@ def create_quiz(
     lesson = db.query(Lesson).filter(Lesson.id == quiz_in.lesson_id).first()
     if lesson is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="الدرس غير موجود")
-    quiz = Quiz(**quiz_in.model_dump())
+    data = quiz_in.model_dump()
+    level_id = data.pop("level_id", None)
+    branch_id = data.pop("branch_id", None)
+    _assert_lesson_scope(db, lesson, level_id, branch_id)
+    quiz = Quiz(**data)
     db.add(quiz)
     db.commit()
     db.refresh(quiz)
@@ -106,10 +123,13 @@ def update_quiz(
 ):
     quiz = _get_quiz_for_admin(db, quiz_id)
     data = quiz_in.model_dump(exclude_unset=True)
+    level_id = data.pop("level_id", None)
+    branch_id = data.pop("branch_id", None)
     if "lesson_id" in data:
         lesson = db.query(Lesson).filter(Lesson.id == data["lesson_id"]).first()
         if lesson is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="الدرس غير موجود")
+        _assert_lesson_scope(db, lesson, level_id, branch_id)
     for field, value in data.items():
         setattr(quiz, field, value)
     db.commit()

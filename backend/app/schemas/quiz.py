@@ -8,6 +8,9 @@ class QuizCreate(BaseModel):
     title: str
     description: Optional[str] = None
     is_active: bool = True
+    # تأكيد النطاق المقصود فقط — لا يُخزّن؛ يجب أن يطابق نطاق مادة الدرس المختار
+    level_id: Optional[int] = None
+    branch_id: Optional[int] = None
 
 
 class QuizUpdate(BaseModel):
@@ -15,6 +18,9 @@ class QuizUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     is_active: Optional[bool] = None
+    # تأكيد النطاق المقصود فقط — لا يُخزّن؛ يُتحقق منه عند تغيير lesson_id
+    level_id: Optional[int] = None
+    branch_id: Optional[int] = None
 
 
 class QuizOut(BaseModel):

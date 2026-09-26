@@ -35,6 +35,17 @@ export interface Subject {
   branch_id: number | null;
 }
 
+export interface TaxLevel {
+  id: number;
+  name: string;
+}
+
+export interface TaxBranch {
+  id: number;
+  level_id: number;
+  name: string;
+}
+
 export interface Lesson {
   id: number;
   subject_id: number;

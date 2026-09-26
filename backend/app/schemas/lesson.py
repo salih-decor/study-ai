@@ -11,6 +11,9 @@ class LessonCreate(BaseModel):
     display_order: int = 0
     is_published: bool = False
     scheduled_at: Optional[datetime] = None
+    # تأكيد النطاق المقصود فقط — لا يُخزّن؛ يجب أن يطابق نطاق المادة المختارة
+    level_id: Optional[int] = None
+    branch_id: Optional[int] = None
 
 
 class LessonUpdate(BaseModel):
@@ -21,6 +24,9 @@ class LessonUpdate(BaseModel):
     display_order: Optional[int] = None
     is_published: Optional[bool] = None
     scheduled_at: Optional[datetime] = None
+    # تأكيد النطاق المقصود فقط — لا يُخزّن؛ يُتحقق منه عند تغيير subject_id
+    level_id: Optional[int] = None
+    branch_id: Optional[int] = None
 
 
 class LessonOut(BaseModel):

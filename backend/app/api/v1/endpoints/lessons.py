@@ -40,6 +40,16 @@ def _to_lesson_out(lesson: Lesson) -> LessonOut:
     return out
 
 
+def _assert_subject_scope(
+    db: Session, subject: Subject, level_id: int | None, branch_id: int | None
+) -> None:
+    """رفض الربط المتقاطع: تأكيد النطاق المرسل يجب أن يطابق نطاق المادة (400 عند التعارض)."""
+    if level_id is not None and subject.level_id is not None and subject.level_id != level_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="المادة لا تنتمي إلى المستوى المحدد")
+    if branch_id is not None and subject.branch_id is not None and subject.branch_id != branch_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="المادة لا تنتمي إلى الشعبة المحددة")
+
+
 @router.get("", response_model=list[LessonOut])
 def list_lessons(
     subject_id: Optional[int] = None,
@@ -70,7 +80,11 @@ def create_lesson(
     subject = db.query(Subject).filter(Subject.id == lesson_in.subject_id).first()
     if subject is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="المادة غير موجودة")
-    lesson = Lesson(**lesson_in.model_dump())
+    data = lesson_in.model_dump()
+    level_id = data.pop("level_id", None)
+    branch_id = data.pop("branch_id", None)
+    _assert_subject_scope(db, subject, level_id, branch_id)
+    lesson = Lesson(**data)
     db.add(lesson)
     db.commit()
     db.refresh(lesson)
@@ -89,10 +103,13 @@ def update_lesson(
     if lesson is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="الدرس غير موجود")
     data = lesson_in.model_dump(exclude_unset=True)
+    level_id = data.pop("level_id", None)
+    branch_id = data.pop("branch_id", None)
     if "subject_id" in data:
         subject = db.query(Subject).filter(Subject.id == data["subject_id"]).first()
         if subject is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="المادة غير موجودة")
+        _assert_subject_scope(db, subject, level_id, branch_id)
     for field, value in data.items():
         setattr(lesson, field, value)
     db.commit()
