@@ -40,6 +40,14 @@ LEVEL_ALIASES: dict[str, str] = {
 }
 
 
+# تكافؤ أسماء الشعب (مفاتيح وقيم بصيغة مطبّعة) — الرسمي "علوم تجريبية"،
+# و"علوم" مقبولة للتوافق مع النصوص القديمة. يُطبق داخل المستوى المطابق فقط.
+BRANCH_ALIASES: dict[str, list[str]] = {
+    "علوم": ["علوم تجريبيه"],          # "علوم" ≡ "علوم تجريبية"
+    "علوم تجريبيه": ["علوم"],          # "علوم تجريبية" ≡ "علوم"
+}
+
+
 def resolve_user_scope(db: Session, user) -> tuple[int | None, int | None]:
     """إرجاع (level_id, branch_id) المطابقين لنصوص المستخدم — أو (None, None) للعام فقط."""
     level_text = (getattr(user, "level", None) or "").strip()
@@ -60,6 +68,7 @@ def resolve_user_scope(db: Session, user) -> tuple[int | None, int | None]:
         if level is None:
             return (None, None)
     norm_branch = _norm(branch_text)
+    candidates = {norm_branch} | {_norm(a) for a in BRANCH_ALIASES.get(norm_branch, [])}
     branch = (
         db.query(Branch)
         .filter(Branch.level_id == level.id)
@@ -67,7 +76,7 @@ def resolve_user_scope(db: Session, user) -> tuple[int | None, int | None]:
     )
     branch_id = None
     for br in branch:
-        if _norm(br.name) == norm_branch:
+        if _norm(br.name) in candidates:
             branch_id = br.id
             break
     if branch_id is None:
