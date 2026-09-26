@@ -12,7 +12,7 @@
 اللغة تعليمية إيجابية — لا كلمة "ضعيف" للطالب.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 from app.models.lesson import Lesson
 from app.models.quiz import Quiz
@@ -24,6 +24,13 @@ from app.services.learning.mistakes import open_recurring_count
 REVIEW_STALE_DAYS = 14
 RECENT_MISTAKE_DAYS = 7
 OVERDUE_BONUS = 15
+
+
+def _as_aware(value: datetime | None) -> datetime | None:
+    """توحيد المنطقة الزمنية: الساذج يُفترض UTC (SQLite) والواعي يبقى كما هو (Postgres)."""
+    if value is None:
+        return None
+    return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
 
 
 def reason_for(mastery: float, recurring: int, overdue: bool = False, stale: bool = False) -> str:
@@ -49,21 +56,23 @@ def build_review_plan(db: Session, user_id: int, limit: int | None = None) -> li
         )
         .all()
     )
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     items: list[dict] = []
     for row in rows:
         mastery = float(row.mastery_score)
         recurring = open_recurring_count(db, user_id, row.lesson_id)
         if mastery >= settings.WEAKNESS_THRESHOLD and recurring == 0:
             continue
+        last_mistake = _as_aware(row.last_mistake_at)
         recent = (
             10
-            if row.last_mistake_at is not None and (now - row.last_mistake_at) <= timedelta(days=RECENT_MISTAKE_DAYS)
+            if last_mistake is not None and (now - last_mistake) <= timedelta(days=RECENT_MISTAKE_DAYS)
             else 0
         )
+        last_reviewed = _as_aware(row.last_reviewed_at)
         stale = (
             10
-            if row.last_reviewed_at is None or (now - row.last_reviewed_at) > timedelta(days=REVIEW_STALE_DAYS)
+            if last_reviewed is None or (now - last_reviewed) > timedelta(days=REVIEW_STALE_DAYS)
             else 0
         )
         sched = (
@@ -75,7 +84,8 @@ def build_review_plan(db: Session, user_id: int, limit: int | None = None) -> li
             )
             .first()
         )
-        overdue = bool(sched is not None and sched.due_at is not None and sched.due_at <= now)
+        due_at = _as_aware(sched.due_at) if sched is not None else None
+        overdue = bool(due_at is not None and due_at <= now)
         overdue_bonus = OVERDUE_BONUS if overdue else 0
         priority = round(min((100 - mastery) + min(15 * recurring, 30) + recent + stale + overdue_bonus, 100), 1)
         lesson = db.query(Lesson).filter(Lesson.id == row.lesson_id).first()
