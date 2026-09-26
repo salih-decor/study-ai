@@ -11,6 +11,7 @@ from app.services.ocr.service import get_ocr_provider, validate_image, safe_file
 from app.services.rag.retriever import get_retriever
 from app.services.ai.service import get_ai_service
 from app.services.rate_limit import check_ai_rate_limit
+from app.services.scoping import apply_subject_scope, resolve_user_scope, subject_in_scope
 
 
 router = APIRouter()
@@ -35,14 +36,25 @@ def _resolve_lesson_scope(
         lesson = base.filter(Lesson.id == lesson_id).first()
         if lesson is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="الدرس غير موجود أو غير متاح")
+        if not admin:
+            subj = db.query(Subject).filter(Subject.id == lesson.subject_id).first()
+            scope_level, scope_branch = resolve_user_scope(db, user)
+            if not subject_in_scope(subj, scope_level, scope_branch):
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="الدرس غير موجود أو غير متاح")
         return [lesson_id]
     if subject_id is not None:
         subject = db.query(Subject).filter(Subject.id == subject_id).first()
         if subject is None or (not admin and not subject.is_active):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="المادة غير موجودة")
+        if not admin:
+            scope_level, scope_branch = resolve_user_scope(db, user)
+            if not subject_in_scope(subject, scope_level, scope_branch):
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="المادة غير موجودة")
         return [lid for (lid,) in base.filter(Lesson.subject_id == subject_id).with_entities(Lesson.id).all()]
     if admin:
         return None
+    scope_level, scope_branch = resolve_user_scope(db, user)
+    base = apply_subject_scope(base, scope_level, scope_branch)
     return [lid for (lid,) in base.with_entities(Lesson.id).all()]
 
 

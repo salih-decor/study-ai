@@ -11,6 +11,7 @@ from app.schemas.quiz_attempt import QuizAnswerCreate, QuizAttemptOut, QuizAnswe
 from app.api.deps import get_current_user
 from app.models.user import User
 from app.services.learning.update import update_learning_data
+from app.services.scoping import lesson_in_scope
 
 
 router = APIRouter()
@@ -46,6 +47,13 @@ def _get_owned_attempt_or_403(db: Session, attempt_id: int, user_id: int) -> Qui
     if attempt.user_id != user_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="هذه المحاولة تخص طالبًا آخر")
     return attempt
+
+
+def _require_attempt_in_scope(db: Session, user: User, attempt: QuizAttempt) -> None:
+    """النطاق قد يتغير بين بدء المحاولة وتقديمها — أعد الفحص قبل أي محتوى."""
+    quiz = db.query(Quiz).filter(Quiz.id == attempt.quiz_id).first()
+    if quiz is None or not lesson_in_scope(db, user, quiz.lesson_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="المحاولة غير موجودة أو غير متاحة")
 
 
 def _build_result(db: Session, attempt: QuizAttempt) -> QuizResultOut:
@@ -95,6 +103,7 @@ def submit_attempt(
     current_user: User = Depends(get_current_user),
 ):
     attempt = _get_owned_attempt_or_403(db, attempt_id, current_user.id)
+    _require_attempt_in_scope(db, current_user, attempt)
     if attempt.completed_at is not None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="تم إرسال هذه المحاولة مسبقًا")
     quiz = db.query(Quiz).filter(Quiz.id == attempt.quiz_id, Quiz.is_active == True).first()  # noqa: E712
@@ -175,6 +184,7 @@ def get_result(
     current_user: User = Depends(get_current_user),
 ):
     attempt = _get_owned_attempt_or_403(db, attempt_id, current_user.id)
+    _require_attempt_in_scope(db, current_user, attempt)
     if attempt.completed_at is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="لم يتم إرسال هذه المحاولة بعد")
     return _build_result(db, attempt)
@@ -187,6 +197,7 @@ def get_attempt(
     current_user: User = Depends(get_current_user),
 ):
     attempt = _get_owned_attempt_or_403(db, attempt_id, current_user.id)
+    _require_attempt_in_scope(db, current_user, attempt)
     out = QuizAttemptOut.model_validate(attempt)
     out.answers_count = len(attempt.answers)
     return out

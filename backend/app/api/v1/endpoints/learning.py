@@ -17,6 +17,7 @@ from app.schemas.learning import (
 )
 from app.api.deps import get_current_user, require_admin
 from app.models.user import User
+from app.services.scoping import allowed_lesson_ids, lesson_in_scope
 from app.services.learning.mistakes import is_recurring
 from app.services.learning.review_plan import build_review_plan
 from app.services.learning.review_scheduler import (
@@ -154,6 +155,9 @@ def get_weaknesses(db: Session = Depends(get_db), current_user: User = Depends(g
         .order_by(StudentWeakness.updated_at.desc())
         .all()
     )
+    allowed = allowed_lesson_ids(db, current_user)
+    if allowed is not None:
+        rows = [r for r in rows if r.lesson_id in allowed]
     return [_weakness_to_out(db, r) for r in rows]
 
 
@@ -165,12 +169,18 @@ def get_mistakes(db: Session = Depends(get_db), current_user: User = Depends(get
         .order_by(StudentMistake.resolved_at.asc(), StudentMistake.mistake_count.desc())
         .all()
     )
+    allowed = allowed_lesson_ids(db, current_user)
+    if allowed is not None:
+        rows = [r for r in rows if r.lesson_id in allowed]
     return [_mistake_to_out(db, r) for r in rows]
 
 
 @router.get("/review-plan", response_model=ReviewPlanOut)
 def get_review_plan(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     items = build_review_plan(db, current_user.id)
+    allowed = allowed_lesson_ids(db, current_user)
+    if allowed is not None:
+        items = [it for it in items if it.get("lesson_id") in allowed]
     return ReviewPlanOut(
         date=datetime.utcnow().date().isoformat(),
         items=[ReviewItemOut(**item) for item in items],
@@ -194,16 +204,26 @@ def _schedule_to_out(db: Session, row: StudentReviewSchedule) -> ReviewScheduleO
 
 @router.get("/review-schedule", response_model=ReviewScheduleListOut)
 def get_review_schedule(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    allowed = allowed_lesson_ids(db, current_user)
+    today = get_today(db, current_user.id)
+    upcoming = get_upcoming(db, current_user.id)
+    if allowed is not None:
+        today = [r for r in today if r.lesson_id in allowed]
+        upcoming = [r for r in upcoming if r.lesson_id in allowed]
     return ReviewScheduleListOut(
-        today=[_schedule_to_out(db, r) for r in get_today(db, current_user.id)],
-        upcoming=[_schedule_to_out(db, r) for r in get_upcoming(db, current_user.id)],
+        today=[_schedule_to_out(db, r) for r in today],
+        upcoming=[_schedule_to_out(db, r) for r in upcoming],
     )
 
 
 @router.get("/review-schedule/today", response_model=ReviewScheduleListOut)
 def get_review_schedule_today(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    today = get_today(db, current_user.id)
+    allowed = allowed_lesson_ids(db, current_user)
+    if allowed is not None:
+        today = [r for r in today if r.lesson_id in allowed]
     return ReviewScheduleListOut(
-        today=[_schedule_to_out(db, r) for r in get_today(db, current_user.id)],
+        today=[_schedule_to_out(db, r) for r in today],
         upcoming=[],
     )
 
@@ -226,6 +246,8 @@ def complete_review_schedule(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="لا يوجد جدول مراجعة لهذا الدرس")
     if row.status != "pending":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="هذه المراجعة ليست بانتظار الإكمال")
+    if not lesson_in_scope(db, current_user, lesson_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="الدرس غير موجود أو غير متاح")
     return _schedule_to_out(db, register_review_completion(db, current_user.id, lesson_id))
 
 

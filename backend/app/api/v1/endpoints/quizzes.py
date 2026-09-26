@@ -14,6 +14,7 @@ from app.schemas.question import (
 from app.schemas.quiz_attempt import QuizAttemptOut
 from app.api.deps import get_current_user, require_admin
 from app.models.user import User
+from app.services.scoping import apply_subject_scope, resolve_user_scope
 
 
 router = APIRouter()
@@ -65,7 +66,8 @@ def _get_quiz_for_admin(db: Session, quiz_id: int) -> Quiz:
     return quiz
 
 
-def _get_quiz_for_student(db: Session, quiz_id: int) -> Quiz:
+def _get_quiz_for_student(db: Session, quiz_id: int, user: User) -> Quiz:
+    level_id, branch_id = resolve_user_scope(db, user)
     quiz = (
         db.query(Quiz)
         .filter(Quiz.id == quiz_id, Quiz.is_active == True)  # noqa: E712
@@ -76,8 +78,8 @@ def _get_quiz_for_student(db: Session, quiz_id: int) -> Quiz:
         )
         .join(Subject, Lesson.subject_id == Subject.id)
         .filter(Subject.is_active == True)  # noqa: E712
-        .first()
     )
+    quiz = apply_subject_scope(quiz, level_id, branch_id).first()
     if quiz is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="الاختبار غير موجود أو غير متاح")
     return quiz
@@ -186,7 +188,7 @@ def get_quiz_detail(
         detail = _quiz_to_out(db, quiz).model_dump()
         detail["questions"] = [QuestionAdminOut.model_validate(q).model_dump() for q in questions]
         return detail
-    quiz = _get_quiz_for_student(db, quiz_id)
+    quiz = _get_quiz_for_student(db, quiz_id, current_user)
     questions = (
         db.query(Question)
         .filter(Question.quiz_id == quiz.id)
@@ -206,7 +208,7 @@ def start_attempt(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    quiz = _quiz_to_out(db, _get_quiz_for_student(db, quiz_id))  # تحقق الإتاحة أولًا
+    quiz = _quiz_to_out(db, _get_quiz_for_student(db, quiz_id, current_user))  # تحقق الإتاحة أولًا
     attempt = QuizAttempt(quiz_id=quiz.id, user_id=current_user.id)
     db.add(attempt)
     db.commit()

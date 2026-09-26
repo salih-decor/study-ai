@@ -13,6 +13,7 @@ from app.models.user import User
 from app.services.rag.retriever import get_retriever
 from app.services.ai.service import get_ai_service
 from app.services.rate_limit import check_ai_rate_limit
+from app.services.scoping import apply_subject_scope, resolve_user_scope, subject_in_scope
 
 
 router = APIRouter()
@@ -55,11 +56,20 @@ def _resolve_scope(db: Session, user: User, lesson_id, subject_id) -> list[int] 
             lesson = _lesson_visible_to_student(db, lesson_id)
             if lesson is None:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="الدرس غير موجود أو غير متاح")
+        if not admin:
+            subj = db.query(Subject).filter(Subject.id == lesson.subject_id).first()
+            scope_level, scope_branch = resolve_user_scope(db, user)
+            if not subject_in_scope(subj, scope_level, scope_branch):
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="الدرس غير موجود أو غير متاح")
         return [lesson_id]
     if subject_id is not None:
         subject = db.query(Subject).filter(Subject.id == subject_id).first()
         if subject is None or (not admin and not subject.is_active):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="المادة غير موجودة")
+        if not admin:
+            scope_level, scope_branch = resolve_user_scope(db, user)
+            if not subject_in_scope(subject, scope_level, scope_branch):
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="المادة غير موجودة")
         q = db.query(Lesson.id).filter(Lesson.subject_id == subject_id)
         if not admin:
             from datetime import datetime
@@ -71,15 +81,19 @@ def _resolve_scope(db: Session, user: User, lesson_id, subject_id) -> list[int] 
     if admin:
         return None
     from datetime import datetime
+    scope_level, scope_branch = resolve_user_scope(db, user)
     rows = (
-        db.query(Lesson.id)
-        .filter(
-            Lesson.is_published == True,  # noqa: E712
-            ((Lesson.scheduled_at == None) | (Lesson.scheduled_at <= datetime.utcnow())),  # noqa: E711
-        )
-        .join(Subject, Lesson.subject_id == Subject.id)
-        .filter(Subject.is_active == True)  # noqa: E712
-        .all()
+        apply_subject_scope(
+            db.query(Lesson.id)
+            .filter(
+                Lesson.is_published == True,  # noqa: E712
+                ((Lesson.scheduled_at == None) | (Lesson.scheduled_at <= datetime.utcnow())),  # noqa: E711
+            )
+            .join(Subject, Lesson.subject_id == Subject.id)
+            .filter(Subject.is_active == True),  # noqa: E712
+            scope_level,
+            scope_branch,
+        ).all()
     )
     return [lid for (lid,) in rows]
 

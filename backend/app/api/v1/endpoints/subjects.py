@@ -11,6 +11,7 @@ from app.schemas.lesson import LessonOut
 from app.api.v1.endpoints.lessons import _lesson_query_for, _to_lesson_out
 from app.api.deps import get_current_user, require_admin
 from app.models.user import User
+from app.services.scoping import apply_subject_scope, resolve_user_scope, subject_in_scope
 
 
 router = APIRouter()
@@ -58,6 +59,8 @@ def list_subjects(db: Session = Depends(get_db), current_user: User = Depends(ge
     q = db.query(Subject)
     if not is_admin:
         q = q.filter(Subject.is_active == True)  # noqa: E712
+        level_id, branch_id = resolve_user_scope(db, current_user)
+        q = apply_subject_scope(q, level_id, branch_id)
     subjects = q.order_by(Subject.display_order, Subject.id).all()
     return [_to_out(db, s, is_admin) for s in subjects]
 
@@ -68,6 +71,10 @@ def get_subject(subject_id: int, db: Session = Depends(get_db), current_user: Us
     subject = db.query(Subject).filter(Subject.id == subject_id).first()
     if subject is None or (not is_admin and not subject.is_active):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="المادة غير موجودة")
+    if not is_admin:
+        level_id, branch_id = resolve_user_scope(db, current_user)
+        if not subject_in_scope(subject, level_id, branch_id):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="المادة غير موجودة")
     return _to_out(db, subject, is_admin)
 
 
@@ -77,6 +84,10 @@ def list_subject_lessons(subject_id: int, db: Session = Depends(get_db), current
     subject = db.query(Subject).filter(Subject.id == subject_id).first()
     if subject is None or (not is_admin and not subject.is_active):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="المادة غير موجودة")
+    if not is_admin:
+        level_id, branch_id = resolve_user_scope(db, current_user)
+        if not subject_in_scope(subject, level_id, branch_id):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="المادة غير موجودة")
     lessons = _lesson_query_for(db, current_user).filter(Lesson.subject_id == subject_id).order_by(
         Lesson.display_order, Lesson.id
     ).all()

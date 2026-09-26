@@ -14,6 +14,7 @@ from app.api.v1.endpoints.quizzes import _quiz_to_out
 from app.services.rag.indexer import sync_lesson_content
 from app.api.deps import get_current_user, require_admin
 from app.models.user import User
+from app.services.scoping import apply_subject_scope, resolve_user_scope
 
 
 router = APIRouter()
@@ -31,6 +32,8 @@ def _lesson_query_for(db: Session, user: User):
             Lesson.is_published == True,  # noqa: E712
             ((Lesson.scheduled_at == None) | (Lesson.scheduled_at <= datetime.utcnow())),  # noqa: E711
         ).join(Subject, Lesson.subject_id == Subject.id).filter(Subject.is_active == True)  # noqa: E712
+        level_id, branch_id = resolve_user_scope(db, user)
+        q = apply_subject_scope(q, level_id, branch_id)
     return q
 
 
