@@ -31,6 +31,8 @@ export interface Subject {
   is_active: boolean;
   display_order: number;
   lessons_count: number;
+  level_id: number | null;
+  branch_id: number | null;
 }
 
 export interface Lesson {

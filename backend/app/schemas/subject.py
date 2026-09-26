@@ -10,6 +10,8 @@ class SubjectCreate(BaseModel):
     image_url: Optional[str] = None
     is_active: bool = True
     display_order: int = 0
+    level_id: Optional[int] = None
+    branch_id: Optional[int] = None
 
 
 class SubjectUpdate(BaseModel):
@@ -19,6 +21,8 @@ class SubjectUpdate(BaseModel):
     image_url: Optional[str] = None
     is_active: Optional[bool] = None
     display_order: Optional[int] = None
+    level_id: Optional[int] = None
+    branch_id: Optional[int] = None
 
 
 class SubjectOut(BaseModel):
@@ -31,6 +35,8 @@ class SubjectOut(BaseModel):
     image_url: Optional[str] = None
     is_active: bool
     display_order: int
+    level_id: Optional[int] = None
+    branch_id: Optional[int] = None
     lessons_count: int = 0
     created_at: datetime
     updated_at: datetime

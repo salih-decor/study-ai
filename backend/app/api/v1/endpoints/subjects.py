@@ -4,6 +4,8 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.models.subject import Subject
 from app.models.lesson import Lesson
+from app.models.level import Level
+from app.models.branch import Branch
 from app.schemas.subject import SubjectCreate, SubjectUpdate, SubjectOut
 from app.schemas.lesson import LessonOut
 from app.api.v1.endpoints.lessons import _lesson_query_for, _to_lesson_out
@@ -29,6 +31,25 @@ def _to_out(db: Session, subject: Subject, is_admin: bool) -> SubjectOut:
     out = SubjectOut.model_validate(subject)
     out.lessons_count = _visible_lessons_count(db, subject.id, is_admin)
     return out
+
+
+def _validate_subject_scope(
+    db: Session, level_id: int | None, branch_id: int | None
+) -> tuple[int | None, int | None]:
+    """التحقق من نطاق المادة: عام (NULL) أو مستوى فقط أو مستوى+شعبة — مع منع شعبة من مستوى مختلف."""
+    if branch_id is not None:
+        branch = db.query(Branch).filter(Branch.id == branch_id).first()
+        if branch is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="الشعبة غير موجودة")
+        if level_id is None:
+            level_id = branch.level_id
+        elif branch.level_id != level_id:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="الشعبة لا تنتمي إلى المستوى المحدد")
+    elif level_id is not None:
+        level = db.query(Level).filter(Level.id == level_id).first()
+        if level is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="المستوى غير موجود")
+    return level_id, branch_id
 
 
 @router.get("", response_model=list[SubjectOut])
@@ -68,7 +89,9 @@ def create_subject(
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
 ):
-    subject = Subject(**subject_in.model_dump())
+    data = subject_in.model_dump()
+    data["level_id"], data["branch_id"] = _validate_subject_scope(db, data.get("level_id"), data.get("branch_id"))
+    subject = Subject(**data)
     db.add(subject)
     db.commit()
     db.refresh(subject)
@@ -85,7 +108,11 @@ def update_subject(
     subject = db.query(Subject).filter(Subject.id == subject_id).first()
     if subject is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="المادة غير موجودة")
-    for field, value in subject_in.model_dump(exclude_unset=True).items():
+    data = subject_in.model_dump(exclude_unset=True)
+    eff_level = data.get("level_id", subject.level_id)
+    eff_branch = data.get("branch_id", subject.branch_id)
+    data["level_id"], data["branch_id"] = _validate_subject_scope(db, eff_level, eff_branch)
+    for field, value in data.items():
         setattr(subject, field, value)
     db.commit()
     db.refresh(subject)

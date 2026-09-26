@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 from app.api.v1.endpoints import auth, subjects, lessons, progress, quizzes, questions, attempts
-from app.api.v1.endpoints import documents, ai, image_analysis, learning
+from app.api.v1.endpoints import documents, ai, image_analysis, learning, levels
 
 
 api_router = APIRouter()
@@ -15,3 +15,4 @@ api_router.include_router(documents.router, prefix="/documents", tags=["المس
 api_router.include_router(ai.router, prefix="/ai", tags=["المساعد الذكي (AI)"])
 api_router.include_router(image_analysis.router, prefix="/image-analysis", tags=["تحليل الصور (OCR)"])
 api_router.include_router(learning.router, prefix="/learning", tags=["ملف التعلم (Learning)"])
+api_router.include_router(levels.router, prefix="/levels", tags=["المستويات والشعب (Levels)"])

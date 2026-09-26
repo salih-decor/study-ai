@@ -12,7 +12,9 @@ export interface AdminOverview {
 
 type Tab = "subjects" | "lessons" | "quizzes" | "documents";
 
-const EMPTY_SUBJECT = { name: "", description: "", icon: "", image_url: "", display_order: 0, is_active: true };
+const EMPTY_SUBJECT = { name: "", description: "", icon: "", image_url: "", display_order: 0, is_active: true, level_id: "" as number | "", branch_id: "" as number | "" };
+
+interface TaxonomyOpt { id: number; name: string; }
 const EMPTY_LESSON = {
   subject_id: 0, title: "", description: "", content: "",
   display_order: 0, is_published: false, scheduled_at: "",
@@ -34,6 +36,8 @@ export default function AdminPage() {
   const [showSubjectForm, setShowSubjectForm] = useState(false);
   const [editingSubject, setEditingSubject] = useState<Subject | null>(null);
   const [subjectForm, setSubjectForm] = useState(EMPTY_SUBJECT);
+  const [taxLevels, setTaxLevels] = useState<TaxonomyOpt[]>([]);
+  const [taxBranches, setTaxBranches] = useState<TaxonomyOpt[]>([]);
 
   // نماذج الدروس
   const [showLessonForm, setShowLessonForm] = useState(false);
@@ -107,9 +111,26 @@ export default function AdminPage() {
   };
 
   // ---------- المواد ----------
+  const loadTaxLevels = async () => {
+    try {
+      const lv = await apiFetch<TaxonomyOpt[]>("/api/v1/levels", { cache: "no-store" });
+      setTaxLevels(lv);
+    } catch { /* تبقى فارغة — النطاق اختياري */ }
+  };
+  const handleTaxLevel = async (id: string) => {
+    setSubjectForm({ ...subjectForm, level_id: id === "" ? "" : Number(id), branch_id: "" });
+    setTaxBranches([]);
+    if (!id) return;
+    try {
+      const br = await apiFetch<TaxonomyOpt[]>(`/api/v1/levels/${id}/branches`, { cache: "no-store" });
+      setTaxBranches(br);
+    } catch { /* تبقى فارغة */ }
+  };
   const openNewSubject = () => {
     setEditingSubject(null);
     setSubjectForm(EMPTY_SUBJECT);
+    setTaxBranches([]);
+    loadTaxLevels();
     setShowSubjectForm(true);
   };
   const openEditSubject = (s: Subject) => {
@@ -117,19 +138,31 @@ export default function AdminPage() {
     setSubjectForm({
       name: s.name, description: s.description ?? "", icon: s.icon ?? "",
       image_url: s.image_url ?? "", display_order: s.display_order, is_active: s.is_active,
+      level_id: s.level_id ?? "", branch_id: s.branch_id ?? "",
     });
+    setTaxBranches([]);
+    loadTaxLevels();
+    if (s.level_id != null) {
+      apiFetch<TaxonomyOpt[]>(`/api/v1/levels/${s.level_id}/branches`, { cache: "no-store" })
+        .then(setTaxBranches).catch(() => {});
+    }
     setShowSubjectForm(true);
   };
   const saveSubject = async (e: React.FormEvent) => {
     e.preventDefault();
+    const payload = {
+      ...subjectForm,
+      level_id: subjectForm.level_id === "" ? null : Number(subjectForm.level_id),
+      branch_id: subjectForm.branch_id === "" ? null : Number(subjectForm.branch_id),
+    };
     try {
       if (editingSubject) {
         await apiFetch(`/api/v1/subjects/${editingSubject.id}`, {
-          method: "PUT", body: JSON.stringify(subjectForm),
+          method: "PUT", body: JSON.stringify(payload),
         });
         flash("تم تعديل المادة ✅");
       } else {
-        await apiFetch("/api/v1/subjects", { method: "POST", body: JSON.stringify(subjectForm) });
+        await apiFetch("/api/v1/subjects", { method: "POST", body: JSON.stringify(payload) });
         flash("تمت إضافة المادة ✅");
       }
       setShowSubjectForm(false);
@@ -491,6 +524,26 @@ export default function AdminPage() {
                 </div>
                 <textarea placeholder="الوصف" value={subjectForm.description} onChange={(e) => setSubjectForm({ ...subjectForm, description: e.target.value })} className={inputCls} rows={2} />
                 <input placeholder="رابط صورة (اختياري)" value={subjectForm.image_url} onChange={(e) => setSubjectForm({ ...subjectForm, image_url: e.target.value })} className={inputCls} dir="ltr" />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <label className="block text-sm text-slate-700">
+                    المستوى (اختياري — فارغ = عام):
+                    <select value={String(subjectForm.level_id)} onChange={(e) => handleTaxLevel(e.target.value)} className={inputCls}>
+                      <option value="">عام — كل المستويات</option>
+                      {taxLevels.map((l) => (
+                        <option key={l.id} value={String(l.id)}>{l.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block text-sm text-slate-700">
+                    الشعبة (اختياري — فارغ = كل الشعب):
+                    <select value={String(subjectForm.branch_id)} onChange={(e) => setSubjectForm({ ...subjectForm, branch_id: e.target.value === "" ? "" : Number(e.target.value) })} className={inputCls} disabled={subjectForm.level_id === "" && taxBranches.length === 0}>
+                      <option value="">عام — كل الشعب</option>
+                      {taxBranches.map((b) => (
+                        <option key={b.id} value={String(b.id)}>{b.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <label className="flex items-center gap-2 text-sm text-slate-700">
                     الترتيب:
