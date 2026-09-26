@@ -15,6 +15,7 @@ from app.core.database import Base
 from app.models import user, subject, lesson, progress, quiz, question, quiz_attempt, quiz_answer  # noqa: F401
 from app.models import lesson_document, document_chunk, ai_request_log  # noqa: F401,E501
 from app.models import weakness, mistake  # noqa: F401
+from app.models import level, branch  # noqa: F401
 from app.models import review_schedule  # noqa: F401
 
 config = context.config
