@@ -337,17 +337,34 @@ export default function AdminPage() {
     setEditingQuestion(q);
     setQuestionForm({
       question_text: q.question_text, question_type: q.question_type,
-      optionsText: (q.options ?? []).join("\n"),
-      correct_answer: q.correct_answer, explanation: q.explanation ?? "",
+      optionsText: q.question_type === "multiple_choice" ? (q.options ?? []).join("\n") : "",
+      correct_answer: normalizeTrueFalse(q.question_type, q.correct_answer),
+      explanation: q.explanation ?? "",
       points: q.points, display_order: q.display_order,
     });
     setShowQuestionForm(true);
+  };
+  // قيم صح/خطأ المقبولة في Backend (attempts.TRUE_SET/FALSE_SET) — للتطبيع عند التعديل فقط
+  function normalizeTrueFalse(t: string, v: string): string {
+    if (t !== "true_false") return v;
+    const s = (v || "").trim().toLowerCase();
+    if (["صح", "صحيح", "true", "t", "1", "نعم", "yes", "y"].includes(s)) return "صح";
+    return "خطأ";
+  }
+  const handleQuestionType = (t: string) => {
+    setQuestionForm((f) => ({
+      ...f,
+      question_type: t,
+      optionsText: t === "multiple_choice" ? f.optionsText : "",
+      correct_answer: t === "true_false" && f.correct_answer !== "صح" && f.correct_answer !== "خطأ" ? "صح" : f.correct_answer,
+    }));
   };
   const saveQuestion = async (e: React.FormEvent) => {
     e.preventDefault();
     if (selectedQuizId === null) return;
     try {
-      const options = questionForm.optionsText.split("\n").map((o) => o.trim()).filter(Boolean);
+      const isMCQ = questionForm.question_type === "multiple_choice";
+      const options = isMCQ ? questionForm.optionsText.split("\n").map((o) => o.trim()).filter(Boolean) : [];
       const payload = {
         question_text: questionForm.question_text,
         question_type: questionForm.question_type,
@@ -803,7 +820,7 @@ l.subject_id === Number(filterSubject)
                     <textarea required placeholder="نص السؤال *" value={questionForm.question_text} onChange={(e) => setQuestionForm({ ...questionForm, question_text: e.target.value })} className={inputCls} rows={2} />
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <label className="text-xs text-slate-700">النوع:
-                        <select value={questionForm.question_type} onChange={(e) => setQuestionForm({ ...questionForm, question_type: e.target.value })} className={inputCls + " mt-1"}>
+                        <select value={questionForm.question_type} onChange={(e) => handleQuestionType(e.target.value)} className={inputCls + " mt-1"}>
                           <option value="multiple_choice">اختيار من متعدد</option>
                           <option value="true_false">صح / خطأ</option>
                           <option value="short_answer">إجابة قصيرة</option>
@@ -816,12 +833,23 @@ l.subject_id === Number(filterSubject)
                         <input type="number" value={questionForm.display_order} onChange={(e) => setQuestionForm({ ...questionForm, display_order: Number(e.target.value) })} className={inputCls + " mt-1"} />
                       </label>
                     </div>
-                    <label className="text-xs text-slate-700 block">الاختيارات (سطر لكل اختيار — للاختيار من متعدد):
-                      <textarea placeholder={"الخيار الأول\nالخيار الثاني\nالخيار الثالث"} value={questionForm.optionsText} onChange={(e) => setQuestionForm({ ...questionForm, optionsText: e.target.value })} className={inputCls + " mt-1"} rows={3} />
-                    </label>
-                    <label className="text-xs text-slate-700 block">الإجابة الصحيحة *:
-                      <input required value={questionForm.correct_answer} onChange={(e) => setQuestionForm({ ...questionForm, correct_answer: e.target.value })} className={inputCls + " mt-1"} />
-                    </label>
+                    {questionForm.question_type === "multiple_choice" && (
+                      <label className="text-xs text-slate-700 block">الاختيارات (سطر لكل اختيار — للاختيار من متعدد):
+                        <textarea placeholder={"الخيار الأول\nالخيار الثاني\nالخيار الثالث"} value={questionForm.optionsText} onChange={(e) => setQuestionForm({ ...questionForm, optionsText: e.target.value })} className={inputCls + " mt-1"} rows={3} />
+                      </label>
+                    )}
+                    {questionForm.question_type === "true_false" ? (
+                      <label className="text-xs text-slate-700 block">الإجابة الصحيحة *:
+                        <select value={questionForm.correct_answer} onChange={(e) => setQuestionForm({ ...questionForm, correct_answer: e.target.value })} className={inputCls + " mt-1"}>
+                          <option value="صح">صح ✓</option>
+                          <option value="خطأ">خطأ ✗</option>
+                        </select>
+                      </label>
+                    ) : (
+                      <label className="text-xs text-slate-700 block">{questionForm.question_type === "short_answer" ? "الإجابة النموذجية *:" : "الإجابة الصحيحة *:"}
+                        <input required value={questionForm.correct_answer} onChange={(e) => setQuestionForm({ ...questionForm, correct_answer: e.target.value })} className={inputCls + " mt-1"} />
+                      </label>
+                    )}
                     <label className="text-xs text-slate-700 block">شرح الإجابة (يظهر للطالب بعد الإرسال):
                       <textarea value={questionForm.explanation} onChange={(e) => setQuestionForm({ ...questionForm, explanation: e.target.value })} className={inputCls + " mt-1"} rows={2} />
                     </label>
