@@ -127,6 +127,13 @@ export interface QuizAnswerResult {
   explanation: string | null;
 }
 
+export interface QuizAnswerCheck {
+  question_id: number;
+  is_correct: boolean;
+  correct_answer: string;
+  explanation: string | null;
+}
+
 export interface QuizResult {
   attempt_id: number;
   quiz_id: number;

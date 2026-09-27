@@ -9,6 +9,14 @@ class QuizAnswerCreate(BaseModel):
     answer: Optional[str] = None
 
 
+class QuizAnswerCheckOut(BaseModel):
+    """نتيجة فحص تدريبي فوري لسؤال واحد — قراءة فقط."""
+    question_id: int
+    is_correct: bool
+    correct_answer: str
+    explanation: Optional[str] = None
+
+
 class QuizAttemptOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

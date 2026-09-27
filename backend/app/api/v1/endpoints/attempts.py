@@ -7,7 +7,7 @@ from app.models.question import Question
 from app.models.quiz_attempt import QuizAttempt
 from app.models.quiz_answer import QuizAnswer
 from app.models.progress import LessonProgress
-from app.schemas.quiz_attempt import QuizAnswerCreate, QuizAttemptOut, QuizAnswerResultOut, QuizResultOut
+from app.schemas.quiz_attempt import QuizAnswerCreate, QuizAttemptOut, QuizAnswerCheckOut, QuizAnswerResultOut, QuizResultOut
 from app.api.deps import get_current_user
 from app.models.user import User
 from app.services.learning.update import update_learning_data
@@ -92,6 +92,34 @@ def _build_result(db: Session, attempt: QuizAttempt) -> QuizResultOut:
         wrong_count=len(questions) - correct_count,
         completed_at=attempt.completed_at,
         answers=answers_out,
+    )
+
+
+@router.post("/{attempt_id}/check", response_model=QuizAnswerCheckOut)
+def check_answer(
+    attempt_id: int,
+    item_in: QuizAnswerCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """فحص تدريبي فوري لسؤال واحد — قراءة فقط: يعيد استخدام _grade دون حفظ وبلا تأثير على الدرجة."""
+    attempt = _get_owned_attempt_or_403(db, attempt_id, current_user.id)
+    _require_attempt_in_scope(db, current_user, attempt)
+    if attempt.completed_at is not None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="انتهت هذه المحاولة — لا يمكن فحص إجابات جديدة")
+    question = (
+        db.query(Question)
+        .filter(Question.id == item_in.question_id, Question.quiz_id == attempt.quiz_id)
+        .first()
+    )
+    if question is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="السؤال غير موجود في هذا الاختبار")
+    ok = _grade(question, item_in.answer)
+    return QuizAnswerCheckOut(
+        question_id=question.id,
+        is_correct=ok,
+        correct_answer=question.correct_answer,
+        explanation=question.explanation,
     )
 
 

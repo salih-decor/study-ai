@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
-import { apiFetch, QuizDetail, QuizQuestion, QuizAttempt, QuizResult } from "@/lib/api";
+import { apiFetch, QuizDetail, QuizQuestion, QuizAttempt, QuizResult, QuizAnswerCheck } from "@/lib/api";
 
 type Phase = "intro" | "exam" | "result";
 
@@ -16,6 +16,11 @@ export default function QuizPage() {
   const [phase, setPhase] = useState<Phase>("intro");
   const [current, setCurrent] = useState(0);
   const [answers, setAnswers] = useState<Record<number, string>>({});
+  // إجابات المحاولة الأولى فقط — هي المعتمدة في الدرجة النهائية (الإعادة تدريبية)
+  const [firstAnswers, setFirstAnswers] = useState<Record<number, string>>({});
+  // نتائج الفحص الفوري لكل سؤال
+  const [checks, setChecks] = useState<Record<number, QuizAnswerCheck>>({});
+  const [checking, setChecking] = useState(false);
   const [result, setResult] = useState<QuizResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -39,6 +44,8 @@ export default function QuizPage() {
       const a = await apiFetch<QuizAttempt>(`/api/v1/quizzes/${id}/attempts`, { method: "POST" });
       setAttempt(a);
       setAnswers({});
+      setFirstAnswers({});
+      setChecks({});
       setCurrent(0);
       setResult(null);
       setPhase("exam");
@@ -49,13 +56,40 @@ export default function QuizPage() {
     }
   };
 
+  const answerAndCheck = async (q: QuizQuestion, value: string) => {
+    if (!attempt || checks[q.id] || checking) return;
+    setAnswers((a) => ({ ...a, [q.id]: value }));
+    setFirstAnswers((f) => (q.id in f ? f : { ...f, [q.id]: value }));
+    setChecking(true);
+    setError("");
+    try {
+      const r = await apiFetch<QuizAnswerCheck>(`/api/v1/attempts/${attempt.id}/check`, {
+        method: "POST",
+        body: JSON.stringify({ question_id: q.id, answer: value }),
+      });
+      setChecks((c) => ({ ...c, [q.id]: r }));
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "تعذر فحص الإجابة");
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  const retryQuestion = (qid: number) => {
+    // تدريبي فقط: مسح محلي — إجابة المحاولة الأولى المحفوظة لا تتغير
+    setAnswers((a) => { const n = { ...a }; delete n[qid]; return n; });
+    setChecks((c) => { const n = { ...c }; delete n[qid]; return n; });
+  };
+
   const submitQuiz = async () => {
     if (!attempt || !quiz) return;
-    if (!confirm(`إنهاء الاختبار وإرسال ${Object.keys(answers).length} من ${quiz.questions.length} إجابات؟`)) return;
+    const answeredCount = Array.from(new Set([...Object.keys(firstAnswers), ...Object.keys(answers)])).length;
+    if (!confirm(`إنهاء الاختبار وإرسال ${answeredCount} من ${quiz.questions.length} إجابات؟`)) return;
     setBusy(true);
     setError("");
     try {
-      const payload = quiz.questions.map((q) => ({ question_id: q.id, answer: answers[q.id] ?? null }));
+      // الدرجة على إجابات المحاولة الأولى فقط
+      const payload = quiz.questions.map((q) => ({ question_id: q.id, answer: firstAnswers[q.id] ?? answers[q.id] ?? null }));
       const r = await apiFetch<QuizResult>(`/api/v1/attempts/${attempt.id}/submit`, {
         method: "POST",
         body: JSON.stringify(payload),
@@ -73,6 +107,7 @@ export default function QuizPage() {
 
   const total = quiz?.questions.length ?? 0;
   const q: QuizQuestion | undefined = quiz?.questions[current];
+  const checked = q ? checks[q.id] : undefined;
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -125,8 +160,9 @@ export default function QuizPage() {
               {(q.question_type === "multiple_choice" || q.question_type === "true_false") && (q.options ?? []).map((opt) => (
                 <button
                   key={opt}
-                  onClick={() => setAnswers({ ...answers, [q.id]: opt })}
-                  className={`w-full text-right px-5 py-3.5 rounded-2xl border-2 transition font-semibold ${
+                  disabled={!!checked || checking}
+                  onClick={() => answerAndCheck(q, opt)}
+                  className={`w-full text-right px-5 py-3.5 rounded-2xl border-2 transition font-semibold disabled:cursor-default ${
                     answers[q.id] === opt
                       ? "border-blue-600 bg-blue-50 text-blue-800"
                       : "border-slate-200 bg-white text-slate-700 hover:border-blue-300"
@@ -135,15 +171,43 @@ export default function QuizPage() {
                   {opt}
                 </button>
               ))}
-              {q.question_type === "short_answer" && (
-                <input
-                  value={answers[q.id] ?? ""}
-                  onChange={(e) => setAnswers({ ...answers, [q.id]: e.target.value })}
-                  placeholder="اكتب إجابتك هنا..."
-                  className="w-full px-5 py-3.5 rounded-2xl border-2 border-slate-200 focus:outline-none focus:border-blue-600 transition"
-                />
+              {q.question_type === "short_answer" && !checked && (
+                <>
+                  <input
+                    value={answers[q.id] ?? ""}
+                    onChange={(e) => setAnswers({ ...answers, [q.id]: e.target.value })}
+                    placeholder="اكتب إجابتك هنا..."
+                    className="w-full px-5 py-3.5 rounded-2xl border-2 border-slate-200 focus:outline-none focus:border-blue-600 transition"
+                  />
+                  <button
+                    onClick={() => answerAndCheck(q, answers[q.id] ?? "")}
+                    disabled={checking || !(answers[q.id] ?? "").trim()}
+                    className="w-full py-3 font-bold text-white bg-blue-600 rounded-xl hover:bg-blue-700 transition disabled:opacity-50"
+                  >
+                    {checking ? "جاري الفحص..." : "إرسال الإجابة ✓"}
+                  </button>
+                </>
               )}
             </div>
+
+            {checking && !checked && (
+              <p className="mt-4 text-center text-sm text-slate-500">جاري فحص الإجابة...</p>
+            )}
+
+            {checked && (
+              <div className={`mt-5 p-5 rounded-2xl border-2 ${checked.is_correct ? "border-emerald-200 bg-emerald-50" : "border-red-200 bg-red-50"}`}>
+                <p className={`font-extrabold text-lg ${checked.is_correct ? "text-emerald-700" : "text-red-600"}`}>
+                  {checked.is_correct ? "✅ إجابة صحيحة — أحسنت!" : "❌ إجابة خاطئة"}
+                </p>
+                {!checked.is_correct && (
+                  <p className="mt-2 text-emerald-700">الإجابة الصحيحة: <span className="font-bold">{checked.correct_answer}</span></p>
+                )}
+                {checked.explanation && (
+                  <p className="mt-2 p-3 bg-amber-50 rounded-xl border border-amber-100 text-amber-900 text-sm">💡 {checked.explanation}</p>
+                )}
+                <p className="mt-2 text-xs text-slate-500">وضع تدريبي — الدرجة النهائية تُحتسب على محاولتك الأولى لهذا السؤال.</p>
+              </div>
+            )}
 
             <div className="mt-8 flex justify-between gap-3">
               <button
@@ -153,6 +217,15 @@ export default function QuizPage() {
               >
                 السابق →
               </button>
+              <div className="flex gap-3">
+                {checked && (
+                  <button
+                    onClick={() => retryQuestion(q.id)}
+                    className="px-6 py-3 font-bold text-blue-700 bg-blue-50 rounded-xl hover:bg-blue-100 transition"
+                  >
+                    🔄 إعادة السؤال
+                  </button>
+                )}
               {current < total - 1 ? (
                 <button
                   onClick={() => setCurrent((c) => c + 1)}
