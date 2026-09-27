@@ -404,6 +404,10 @@ export default function AdminPage() {
   // ---------- المستندات (RAG) ----------
   const [docLessonId, setDocLessonId] = useState<string>("");
   const [docs, setDocs] = useState<LessonDocument[]>([]);
+  // فلاتر تبويب المستندات (مستقلة عن فلاتر الاختبارات والدروس)
+  const [dLevel, setDLevel] = useState<string>("");
+  const [dBranch, setDBranch] = useState<string>("");
+  const [dSubject, setDSubject] = useState<string>("");
   const [showDocTextForm, setShowDocTextForm] = useState(false);
   const [docTitle, setDocTitle] = useState("");
   const [docContent, setDocContent] = useState("");
@@ -507,6 +511,16 @@ export default function AdminPage() {
     if (qSubject !== "" && s.id !== Number(qSubject)) return false;
     return subjectMatches(s, qLevel, qBranch);
   });
+  // فلاتر تبويب المستندات: المستوى → الشعبة → المادة → الدرس (المستندات تتبع الدرس المختار)
+  const resetDocSelection = () => { setDocLessonId(""); setDocs([]); };
+  const handleDLevel = (id: string) => { setDLevel(id); setDBranch(""); setDSubject(""); resetDocSelection(); };
+  const handleDBranch = (id: string) => { setDBranch(id); setDSubject(""); resetDocSelection(); };
+  const handleDSubject = (id: string) => { setDSubject(id); resetDocSelection(); };
+  const dBranchOpts = dLevel === "" ? allTaxBranches : allTaxBranches.filter((b) => String(b.level_id) === dLevel);
+  const dFilteredSubjects = subjects.filter((s) => subjectMatches(s, dLevel, dBranch));
+  const dLessonOpts = lessons.filter((l) =>
+    dSubject !== "" ? l.subject_id === Number(dSubject) : dFilteredSubjects.some((s) => s.id === l.subject_id)
+  );
   const scopeBranchOpts = scopeLevel === "" ? [] : allTaxBranches.filter((b) => String(b.level_id) === scopeLevel);
   const scopeAssertion = {
     ...(scopeLevel !== "" ? { level_id: Number(scopeLevel) } : {}),
@@ -936,17 +950,35 @@ l.subject_id === Number(filterSubject)
           <section>
             <div className="flex flex-wrap justify-between items-center gap-3 mb-4">
               <h2 className="text-xl font-bold text-slate-800">مستندات RAG للدرس</h2>
-              <select
-                value={docLessonId}
-                onChange={(e) => { setDocLessonId(e.target.value); loadDocs(e.target.value); }}
-                className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm"
-              >
-                <option value="">— اختر الدرس —</option>
-                {scopedLessons.map((l) => {
-                  const s = subjects.find((x) => x.id === l.subject_id);
-                  return <option key={l.id} value={l.id}>{s ? subjectScopeLabel(s) + " / " : ""}{l.title}</option>;
-                })}
-              </select>
+            </div>
+
+            <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm mb-4">
+              <p className="text-sm font-bold text-slate-700 mb-3">تصفية المستندات</p>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                <select value={dLevel} onChange={(e) => handleDLevel(e.target.value)} className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm">
+                  <option value="">كل المستويات</option>
+                  {scopeLevels.map((l) => <option key={l.id} value={String(l.id)}>{l.name}</option>)}
+                </select>
+                <select value={dBranch} onChange={(e) => handleDBranch(e.target.value)} className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm">
+                  <option value="">كل الشعب</option>
+                  {dBranchOpts.map((b) => <option key={b.id} value={String(b.id)}>{b.name}</option>)}
+                </select>
+                <select value={dSubject} onChange={(e) => handleDSubject(e.target.value)} className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm">
+                  <option value="">كل المواد</option>
+                  {dFilteredSubjects.map((s) => <option key={s.id} value={String(s.id)}>{subjectScopeLabel(s)}</option>)}
+                </select>
+                <select
+                  value={docLessonId}
+                  onChange={(e) => { setDocLessonId(e.target.value); setDocs([]); loadDocs(e.target.value); }}
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm"
+                >
+                  <option value="">— اختر الدرس —</option>
+                  {dLessonOpts.map((l) => {
+                    const s = subjects.find((x) => x.id === l.subject_id);
+                    return <option key={l.id} value={l.id}>{s ? subjectScopeLabel(s) + " / " : ""}{l.title}</option>;
+                  })}
+                </select>
+              </div>
             </div>
 
             {!docLessonId && (
