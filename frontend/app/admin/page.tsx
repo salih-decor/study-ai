@@ -28,6 +28,11 @@ export default function AdminPage() {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [filterSubject, setFilterSubject] = useState<string>("all");
+  // فلاتر تبويب الاختبارات (مستقلة عن فلتر تبويب الدروس لتجنب تعارض state)
+  const [qLevel, setQLevel] = useState<string>("");
+  const [qBranch, setQBranch] = useState<string>("");
+  const [qSubject, setQSubject] = useState<string>("");
+  const [qLesson, setQLesson] = useState<string>("");
   // فلتر النطاق العام: المستوى → الشعبة → المادة → المحتوى
   const [scopeLevel, setScopeLevel] = useState<string>("");
   const [scopeBranch, setScopeBranch] = useState<string>("");
@@ -475,19 +480,32 @@ export default function AdminPage() {
     if (s.branch_id != null && scopeNames.branches[s.branch_id]) parts.push(scopeNames.branches[s.branch_id]);
     return parts.join(" — ");
   };
-  const subjectInScope = (s: Subject) =>
-    (scopeLevel === "" || (s.level_id != null && String(s.level_id) === scopeLevel)) &&
-    (scopeBranch === "" || (s.branch_id != null && String(s.branch_id) === scopeBranch));
+  const subjectMatches = (s: Subject, level: string, branch: string) =>
+    (level === "" || (s.level_id != null && String(s.level_id) === level)) &&
+    (branch === "" || (s.branch_id != null && String(s.branch_id) === branch));
+  const subjectInScope = (s: Subject) => subjectMatches(s, scopeLevel, scopeBranch);
   const scopedSubjects = subjects.filter(subjectInScope);
   const scopedLessons = lessons.filter((l) => {
     const s = subjects.find((x) => x.id === l.subject_id);
     return s ? subjectInScope(s) : true;
   });
-  const scopedQuizzes = quizzes.filter((q) => {
+  // فلاتر تبويب الاختبارات: المستوى → الشعبة → المادة → الدرس
+  const handleQLevel = (id: string) => { setQLevel(id); setQBranch(""); setQSubject(""); setQLesson(""); };
+  const handleQBranch = (id: string) => { setQBranch(id); setQSubject(""); setQLesson(""); };
+  const handleQSubject = (id: string) => { setQSubject(id); setQLesson(""); };
+  const qBranchOpts = qLevel === "" ? allTaxBranches : allTaxBranches.filter((b) => String(b.level_id) === qLevel);
+  const qFilteredSubjects = subjects.filter((s) => subjectMatches(s, qLevel, qBranch));
+  const qLessonOpts = lessons.filter((l) =>
+    qSubject !== "" ? l.subject_id === Number(qSubject) : qFilteredSubjects.some((s) => s.id === l.subject_id)
+  );
+  const visibleQuizzes = quizzes.filter((q) => {
+    if (qLesson !== "") return q.lesson_id === Number(qLesson);
     const l = lessons.find((x) => x.id === q.lesson_id);
     if (!l) return true;
     const s = subjects.find((x) => x.id === l.subject_id);
-    return s ? subjectInScope(s) : true;
+    if (!s) return true;
+    if (qSubject !== "" && s.id !== Number(qSubject)) return false;
+    return subjectMatches(s, qLevel, qBranch);
   });
   const scopeBranchOpts = scopeLevel === "" ? [] : allTaxBranches.filter((b) => String(b.level_id) === scopeLevel);
   const scopeAssertion = {
@@ -754,6 +772,28 @@ l.subject_id === Number(filterSubject)
               </button>
             </div>
 
+            <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm mb-4">
+              <p className="text-sm font-bold text-slate-700 mb-3">تصفية الاختبارات</p>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                <select value={qLevel} onChange={(e) => handleQLevel(e.target.value)} className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm">
+                  <option value="">كل المستويات</option>
+                  {scopeLevels.map((l) => <option key={l.id} value={String(l.id)}>{l.name}</option>)}
+                </select>
+                <select value={qBranch} onChange={(e) => handleQBranch(e.target.value)} className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm">
+                  <option value="">كل الشعب</option>
+                  {qBranchOpts.map((b) => <option key={b.id} value={String(b.id)}>{b.name}</option>)}
+                </select>
+                <select value={qSubject} onChange={(e) => handleQSubject(e.target.value)} className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm">
+                  <option value="">كل المواد</option>
+                  {qFilteredSubjects.map((s) => <option key={s.id} value={String(s.id)}>{subjectScopeLabel(s)}</option>)}
+                </select>
+                <select value={qLesson} onChange={(e) => setQLesson(e.target.value)} className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm">
+                  <option value="">كل الدروس</option>
+                  {qLessonOpts.map((l) => <option key={l.id} value={String(l.id)}>{l.title}</option>)}
+                </select>
+              </div>
+            </div>
+
             {showQuizForm && (
               <form onSubmit={guarded(saveQuiz)} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm mb-6 space-y-4">
                 <h3 className="font-bold text-slate-800">{editingQuiz ? "تعديل اختبار" : "اختبار جديد"}</h3>
@@ -783,7 +823,7 @@ l.subject_id === Number(filterSubject)
             )}
 
             <div className="space-y-3 mb-6">
-              {scopedQuizzes.map((q) => (
+              {visibleQuizzes.map((q) => (
                 <div key={q.id} className={`bg-white p-4 rounded-2xl border shadow-sm ${selectedQuizId === q.id ? "border-blue-400 ring-2 ring-blue-100" : "border-slate-100"}`}>
                   <div className="flex flex-wrap items-center gap-3">
                     <span className={`text-[11px] font-bold px-2 py-1 rounded-lg ${q.is_active ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
