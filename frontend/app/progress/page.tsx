@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiFetch, LearningProfile, Mistake, ReviewScheduleList, ReviewSchedule } from "@/lib/api";
+import CollapsibleSection from "@/components/CollapsibleSection";
 
 export default function ProgressPage() {
   const router = useRouter();
@@ -97,104 +98,96 @@ export default function ProgressPage() {
         </div>
 
         {/* مراجعات اليوم */}
-        <section className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-          <h2 className="font-bold text-lg text-slate-800 mb-4">🎯 مراجعات اليوم</h2>
-          {(schedule?.today.length ?? 0) === 0 ? (
-            <p className="text-slate-400 text-sm text-center py-4">لا توجد مراجعات مستحقة اليوم. أحسنت! 🎉</p>
-          ) : (
-            <div className="space-y-3">
-              {schedule?.today.map((r: ReviewSchedule) => (
-                <div key={r.lesson_id} className="px-4 py-3 bg-blue-50/60 rounded-2xl border border-blue-100 flex flex-wrap items-center gap-3">
-                  <div className="flex-1 min-w-40">
-                    <Link href={`/lessons/${r.lesson_id}`} className="font-bold text-sm text-slate-800 hover:underline">
-                      📚 {r.lesson_title}
-                    </Link>
-                    <p className="text-xs text-slate-500 mt-1">
-                      آخر مراجعة: {fmtDate(r.last_reviewed_at)} • مرات المراجعة: {r.review_count} • الأولوية: {r.priority}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => completeReview(r.lesson_id)}
-                    disabled={completingId === r.lesson_id}
-                    className="px-4 py-2 text-sm font-bold text-white bg-emerald-600 rounded-xl hover:bg-emerald-700 transition disabled:opacity-50"
-                  >
-                    {completingId === r.lesson_id ? "جاري التسجيل..." : "✓ أكملت المراجعة"}
-                  </button>
+        <CollapsibleSection
+          title="🎯 مراجعات اليوم"
+          emptyText={(schedule?.today.length ?? 0) === 0 ? "لا توجد مراجعات مستحقة اليوم. أحسنت! 🎉" : undefined}
+        >
+          <div className="space-y-3">
+            {schedule?.today.map((r: ReviewSchedule) => (
+              <div key={r.lesson_id} className="px-4 py-3 bg-blue-50/60 rounded-2xl border border-blue-100 flex flex-wrap items-center gap-3">
+                <div className="flex-1 min-w-40">
+                  <Link href={`/lessons/${r.lesson_id}`} className="font-bold text-sm text-slate-800 hover:underline">
+                    📚 {r.lesson_title}
+                  </Link>
+                  <p className="text-xs text-slate-500 mt-1">
+                    آخر مراجعة: {fmtDate(r.last_reviewed_at)} • مرات المراجعة: {r.review_count} • الأولوية: {r.priority}
+                  </p>
                 </div>
-              ))}
-            </div>
-          )}
-        </section>
+                <button
+                  onClick={() => completeReview(r.lesson_id)}
+                  disabled={completingId === r.lesson_id}
+                  className="px-4 py-2 text-sm font-bold text-white bg-emerald-600 rounded-xl hover:bg-emerald-700 transition disabled:opacity-50"
+                >
+                  {completingId === r.lesson_id ? "جاري التسجيل..." : "✓ أكملت المراجعة"}
+                </button>
+              </div>
+            ))}
+          </div>
+        </CollapsibleSection>
 
         {/* المراجعات القادمة */}
-        <section className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-          <h2 className="font-bold text-lg text-slate-800 mb-4">🗓️ المراجعات القادمة</h2>
-          {(schedule?.upcoming.length ?? 0) === 0 ? (
-            <p className="text-slate-400 text-sm text-center py-4">لا توجد مراجعات مجدولة قادمة.</p>
-          ) : (
-            <div className="space-y-2">
-              {schedule?.upcoming.map((r: ReviewSchedule) => (
-                <div key={r.lesson_id} className="flex items-center justify-between px-4 py-3 bg-slate-50 rounded-2xl border border-slate-100">
-                  <Link href={`/lessons/${r.lesson_id}`} className="font-semibold text-sm text-slate-700 hover:underline">
-                    📖 {r.lesson_title}
-                  </Link>
-                  <span className="text-xs text-slate-500">الموعد: {fmtDate(r.due_at)}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
+        <CollapsibleSection
+          title="🗓️ المراجعات القادمة"
+          emptyText={(schedule?.upcoming.length ?? 0) === 0 ? "لا توجد مراجعات مجدولة قادمة." : undefined}
+        >
+          <div className="space-y-2">
+            {schedule?.upcoming.map((r: ReviewSchedule) => (
+              <div key={r.lesson_id} className="flex items-center justify-between px-4 py-3 bg-slate-50 rounded-2xl border border-slate-100">
+                <Link href={`/lessons/${r.lesson_id}`} className="font-semibold text-sm text-slate-700 hover:underline">
+                  📖 {r.lesson_title}
+                </Link>
+                <span className="text-xs text-slate-500">الموعد: {fmtDate(r.due_at)}</span>
+              </div>
+            ))}
+          </div>
+        </CollapsibleSection>
 
         {/* الأداء الأخير */}
-        <section className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-          <h2 className="font-bold text-lg text-slate-800 mb-4">⚡ الأداء الأخير</h2>
-          {(profile?.recent_performance.length ?? 0) === 0 ? (
-            <p className="text-slate-400 text-sm text-center py-4">لم تكمل أي اختبار بعد — 0 بيانات حقيقية، وليست تجريبية.</p>
-          ) : (
-            <div className="space-y-2">
-              {profile?.recent_performance.map((r, i) => (
-                <div key={i} className="flex items-center justify-between px-4 py-3 bg-slate-50 rounded-2xl border border-slate-100">
-                  <span className="font-semibold text-sm text-slate-700">{r.quiz_title}</span>
-                  <span className={`font-extrabold ${r.percentage >= 60 ? "text-emerald-600" : "text-amber-600"}`}>{r.percentage}%</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
+        <CollapsibleSection
+          title="⚡ الأداء الأخير"
+          emptyText={(profile?.recent_performance.length ?? 0) === 0 ? "لم تكمل أي اختبار بعد — 0 بيانات حقيقية، وليست تجريبية." : undefined}
+        >
+          <div className="space-y-2">
+            {profile?.recent_performance.map((r, i) => (
+              <div key={i} className="flex items-center justify-between px-4 py-3 bg-slate-50 rounded-2xl border border-slate-100">
+                <span className="font-semibold text-sm text-slate-700">{r.quiz_title}</span>
+                <span className={`font-extrabold ${r.percentage >= 60 ? "text-emerald-600" : "text-amber-600"}`}>{r.percentage}%</span>
+              </div>
+            ))}
+          </div>
+        </CollapsibleSection>
 
         {/* دروس تحتاج مراجعة */}
-        <section className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-          <h2 className="font-bold text-lg text-slate-800 mb-4">📚 دروس تحتاج مراجعة إضافية</h2>
-          {(profile?.weak_lessons.length ?? 0) === 0 ? (
-            <p className="text-slate-400 text-sm text-center py-4">لا توجد دروس تحتاج مراجعة حاليًا — أحسنت! 🎉</p>
-          ) : (
-            <div className="space-y-3">
-              {profile?.weak_lessons.map((w) => (
-                <Link key={w.lesson_id} href={`/lessons/${w.lesson_id}`} className="block px-4 py-3 bg-amber-50/60 rounded-2xl border border-amber-100 hover:shadow-md transition">
-                  <div className="flex justify-between items-center">
-                    <span className="font-bold text-sm text-slate-800">{w.lesson_title}</span>
-                    <span className="font-extrabold text-amber-700">{w.mastery_score}%</span>
-                  </div>
-                  <div className="mt-2 h-2 bg-white rounded-full overflow-hidden border border-amber-100">
-                    <div className="h-full bg-amber-500 rounded-full" style={{ width: `${w.mastery_score}%` }} />
-                  </div>
-                  <p className="mt-1.5 text-[11px] text-slate-500">
-                    {w.confidence < 1
-                      ? `تقدير مبكر (الثقة ${Math.round(w.confidence * 100)}% — بناءً على ${w.sample_size} إجابات)`
-                      : `تقدير موثوق (بناءً على ${w.sample_size} إجابات)`}
-                  </p>
-                </Link>
-              ))}
-            </div>
-          )}
-        </section>
+        <CollapsibleSection
+          title="📚 دروس تحتاج مراجعة إضافية"
+          emptyText={(profile?.weak_lessons.length ?? 0) === 0 ? "لا توجد دروس تحتاج مراجعة حاليًا — أحسنت! 🎉" : undefined}
+        >
+          <div className="space-y-3">
+            {profile?.weak_lessons.map((w) => (
+              <Link key={w.lesson_id} href={`/lessons/${w.lesson_id}`} className="block px-4 py-3 bg-amber-50/60 rounded-2xl border border-amber-100 hover:shadow-md transition">
+                <div className="flex justify-between items-center">
+                  <span className="font-bold text-sm text-slate-800">{w.lesson_title}</span>
+                  <span className="font-extrabold text-amber-700">{w.mastery_score}%</span>
+                </div>
+                <div className="mt-2 h-2 bg-white rounded-full overflow-hidden border border-amber-100">
+                  <div className="h-full bg-amber-500 rounded-full" style={{ width: `${w.mastery_score}%` }} />
+                </div>
+                <p className="mt-1.5 text-[11px] text-slate-500">
+                  {w.confidence < 1
+                    ? `تقدير مبكر (الثقة ${Math.round(w.confidence * 100)}% — بناءً على ${w.sample_size} إجابات)`
+                    : `تقدير موثوق (بناءً على ${w.sample_size} إجابات)`}
+                </p>
+              </Link>
+            ))}
+          </div>
+        </CollapsibleSection>
 
         {/* الأخطاء المتكررة */}
-        <section className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-          <h2 className="font-bold text-lg text-slate-800 mb-4">🔁 الأخطاء المتكررة</h2>
-          {openMistakes.length === 0 ? (
-            <p className="text-slate-400 text-sm text-center py-4">لا توجد أخطاء متكررة مفتوحة حاليًا.</p>
-          ) : (
+        <CollapsibleSection
+          title="🔁 الأخطاء المتكررة"
+          emptyText={openMistakes.length === 0 && resolvedCount === 0 ? "لا توجد أخطاء متكررة مفتوحة حاليًا." : undefined}
+        >
+          {openMistakes.length > 0 && (
             <div className="space-y-2">
               {openMistakes.map((m) => (
                 <div key={m.id} className="px-4 py-3 bg-red-50/60 rounded-2xl border border-red-100">
@@ -212,7 +205,7 @@ export default function ProgressPage() {
               🎉 تحسن أداؤك — تم حل {resolvedCount} من أخطائك السابقة!
             </p>
           )}
-        </section>
+        </CollapsibleSection>
       </main>
     </div>
   );
