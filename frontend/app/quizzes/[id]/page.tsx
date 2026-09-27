@@ -244,6 +244,7 @@ export default function QuizPage() {
               )}
             </div>
           </div>
+          </div>
         )}
 
         {/* النتيجة */}
