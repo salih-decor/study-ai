@@ -157,7 +157,8 @@ export default function QuizPage() {
             <h2 className="text-xl font-bold text-slate-900 leading-relaxed">{q.question_text}</h2>
 
             <div className="mt-5 space-y-3">
-              {(q.question_type === "multiple_choice" || q.question_type === "true_false") && (q.options ?? []).map((opt) => (
+              {(q.question_type === "multiple_choice" || q.question_type === "true_false") &&
+                ((q.question_type === "true_false" && (q.options ?? []).length === 0 ? ["صح", "خطأ"] : (q.options ?? [])).map((opt) => (
                 <button
                   key={opt}
                   disabled={!!checked || checking}
@@ -170,7 +171,7 @@ export default function QuizPage() {
                 >
                   {opt}
                 </button>
-              ))}
+              )))}
               {q.question_type === "short_answer" && !checked && (
                 <>
                   <input
