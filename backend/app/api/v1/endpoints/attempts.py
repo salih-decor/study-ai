@@ -1,4 +1,6 @@
 from datetime import datetime
+import re
+import unicodedata
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.core.database import get_db
@@ -24,6 +26,34 @@ def _norm(value) -> str:
     return str(value or "").strip().casefold()
 
 
+def _norm_text(value) -> str:
+    """تطبيع أعمق للنص الحر: إزالة التشكيل والتطويل والترقيم وتوحيد الهمزات."""
+    t = unicodedata.normalize("NFKD", str(value or ""))
+    t = "".join(c for c in t if unicodedata.category(c) != "Mn")
+    t = t.replace("ـ", "")
+    t = re.sub(r"[^\w\s]", " ", t, flags=re.UNICODE)
+    t = re.sub(r"\s+", " ", t).strip().casefold()
+    t = t.replace("أ", "ا").replace("إ", "ا").replace("آ", "ا")
+    t = t.replace("ة", "ه").replace("ى", "ي")
+    return t
+
+
+def _short_answer_match(student_answer, correct_answer) -> bool:
+    """مطابقة متسامحة للإجابة القصيرة: تطابق تام أو احتواء أو تداخل ≥60% من كلمات النموذجية."""
+    g = _norm_text(student_answer)
+    c = _norm_text(correct_answer)
+    if not g or not c:
+        return False
+    if g == c:
+        return True
+    if c in g or g in c:
+        return True
+    gt, ct = set(g.split()), set(c.split())
+    if not ct:
+        return False
+    return len(gt & ct) / len(ct) >= 0.6
+
+
 def _grade(question: Question, student_answer) -> bool:
     """تصحيح سؤال واحد في Backend — لا يُوثق بأي حساب من Frontend."""
     given = _norm(student_answer)
@@ -36,7 +66,9 @@ def _grade(question: Question, student_answer) -> bool:
         if given_bool is not None and correct_bool is not None:
             return given_bool == correct_bool
         return given == correct
-    # multiple_choice / short_answer (ومستقبلًا essay يُصحح يدويًا/بالذكاء الاصطناعي)
+    # multiple_choice (ومستقبلًا essay يُصحح يدويًا/بالذكاء الاصطناعي)
+    if question.question_type == "short_answer":
+        return _short_answer_match(student_answer, question.correct_answer)
     return given == correct
 
 
